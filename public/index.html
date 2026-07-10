@@ -8,9 +8,9 @@
 </head>
 <body>
   <div class="appbar">
-    <span class="brand">📝 ควิซออนไลน์</span>
+    <span class="brand">ควิซออนไลน์</span>
     <span class="spacer" style="flex:1"></span>
-    <a class="btn ghost sm" id="adminLink" href="/users" style="display:none">🛡️ ผู้ใช้ระบบ</a>
+    <a class="btn ghost sm" id="adminLink" href="/users" style="display:none">ผู้ใช้ระบบ</a>
     <span class="email" id="meEmail"></span>
     <button class="btn ghost sm" onclick="logout()">ออกจากระบบ</button>
   </div>
@@ -18,9 +18,9 @@
   <!-- ===== แดชบอร์ด (หน้า base) ===== -->
   <div class="wrap" id="dashView">
     <div class="row" style="margin-bottom:8px">
-      <h2 style="margin:0">🗂️ ควิซของฉัน</h2>
+      <h2 style="margin:0">ควิซของฉัน</h2>
       <div class="spacer"></div>
-      <button class="btn" onclick="newQuiz()">➕ สร้างควิซใหม่</button>
+      <button class="btn" onclick="newQuiz()">+ สร้างควิซใหม่</button>
     </div>
     <div class="grid" id="quizGrid"></div>
     <div id="emptyState" class="card" style="display:none;text-align:center">
@@ -41,17 +41,22 @@
       <input type="text" id="qTitle" placeholder="เช่น ข้อสอบกลางภาค วิชาวิทยาศาสตร์">
       <label>คำอธิบาย (ไม่บังคับ)</label>
       <textarea id="qDesc" placeholder="รายละเอียดให้ผู้ทำ"></textarea>
-      <label>⏱️ เวลาทำควิซ (นาที) — ใส่ 0 = ไม่จำกัดเวลา</label>
+      <label>เวลาทำควิซ (นาที) — ใส่ 0 = ไม่จำกัดเวลา</label>
       <input type="number" id="qTime" min="0" value="0" style="max-width:160px">
       <p class="muted">ตัวจับเวลาจะเริ่มนับหลังผู้ทำกรอกชื่อและเข้าสู่หน้าโจทย์ และแสดงให้ผู้ทำเห็น</p>
+      <label class="switch" style="margin-top:14px">
+        <input type="checkbox" id="qRetake">
+        <span class="track"></span>
+        <span>อนุญาตให้ทำซ้ำได้ (ปิดไว้ = ทำได้ครั้งเดียวต่อเครื่อง)</span>
+      </label>
     </div>
 
     <div id="parts"></div>
 
     <div class="row">
-      <button class="btn ghost" onclick="addPart()">➕ เพิ่ม Part</button>
+      <button class="btn ghost" onclick="addPart()">+ เพิ่ม Part</button>
       <div class="spacer"></div>
-      <button class="btn" id="saveBtn" onclick="saveQuiz()">💾 บันทึกควิซ</button>
+      <button class="btn" id="saveBtn" onclick="saveQuiz()">บันทึกควิซ</button>
     </div>
   </div>
 
@@ -131,7 +136,7 @@
     function blankPart(n) { return { id: 'p' + Math.random().toString(36).slice(2, 8), title: 'Part ' + n, questions: [blankQuestion()] }; }
 
     function newQuiz() {
-      state = { quizId: null, title: '', description: '', timeLimitMin: 0, parts: [blankPart(1)] };
+      state = { quizId: null, title: '', description: '', timeLimitMin: 0, allowRetake: false, parts: [blankPart(1)] };
       openEditor('สร้างควิซใหม่');
     }
     async function editQuiz(id) {
@@ -141,6 +146,7 @@
       state = {
         quizId: id, title: quiz.title, description: quiz.description,
         timeLimitMin: Math.round((quiz.timeLimitSec || 0) / 60),
+        allowRetake: !!quiz.allowRetake,
         parts: (quiz.parts || []).map((pt) => ({
           id: pt.id, title: pt.title,
           questions: pt.questions.map((q) => ({
@@ -161,6 +167,7 @@
       document.getElementById('qTitle').value = state.title;
       document.getElementById('qDesc').value = state.description;
       document.getElementById('qTime').value = state.timeLimitMin;
+      document.getElementById('qRetake').checked = !!state.allowRetake;
       renderParts();
       window.scrollTo(0, 0);
     }
@@ -178,7 +185,7 @@
             <button class="btn ghost sm" onclick="removePart(${pi})" title="ลบ Part">🗑️</button>
           </div>
           ${pt.questions.map((q, qi) => renderQuestion(pi, qi, q)).join('')}
-          <button class="btn ghost sm" onclick="addQuestion(${pi})">➕ เพิ่มคำถามใน Part นี้</button>
+          <button class="btn ghost sm" onclick="addQuestion(${pi})">+ เพิ่มคำถามใน Part นี้</button>
         </div>`).join('');
       autosizeAll();
     }
@@ -237,7 +244,7 @@
                    oninput="state.parts[${pi}].questions[${qi}].choices[${ci}]=this.value">
             ${q.choices.length > 2 ? `<button class="btn ghost sm" onclick="removeChoice(${pi},${qi},${ci})">✕</button>` : ''}
           </div>`).join('')}
-        ${q.choices.length < 10 ? `<button class="btn ghost sm" onclick="addChoice(${pi},${qi})">➕ เพิ่มช้อย</button>` : ''}`;
+        ${q.choices.length < 10 ? `<button class="btn ghost sm" onclick="addChoice(${pi},${qi})">+ เพิ่มช้อย</button>` : ''}`;
     }
 
     // ---------- แก้ไข state ----------
@@ -293,11 +300,13 @@
       state.title = document.getElementById('qTitle').value.trim();
       state.description = document.getElementById('qDesc').value.trim();
       state.timeLimitMin = Math.max(0, parseInt(document.getElementById('qTime').value, 10) || 0);
+      state.allowRetake = document.getElementById('qRetake').checked;
       if (!state.title) return toast('ใส่ชื่อควิซก่อน');
 
       const payload = {
         title: state.title, description: state.description,
         timeLimitSec: state.timeLimitMin * 60,
+        allowRetake: state.allowRetake,
         parts: state.parts,
       };
       const btn = document.getElementById('saveBtn');

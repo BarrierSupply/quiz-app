@@ -24,17 +24,18 @@
         </div>
         <div class="spacer"></div>
         <a class="btn ghost sm" href="/">← หน้าควิซของฉัน</a>
-        <button class="btn ghost sm" onclick="load()">🔄 รีเฟรช</button>
+        <a class="btn sm" id="exportBtn" href="#">⬇️ Export CSV</a>
+        <button class="btn ghost sm" onclick="load()">รีเฟรช</button>
       </div>
-      <p class="muted">อัปเดตอัตโนมัติทุก 12 วินาที</p>
+      <p class="muted">อัปเดตอัตโนมัติทุก 12 วินาที · ไฟล์ CSV เปิดใน Excel ได้เลย (รองรับภาษาไทย)</p>
     </div>
 
     <div class="card" id="tableCard" style="display:none">
-      <h2>👥 ผู้ตอบ &amp; พฤติกรรมการออกจากจอ</h2>
+      <h2>ผู้ตอบ &amp; พฤติกรรมการออกจากจอ</h2>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
-            <th>ชื่อ</th><th>คะแนนปรนัย</th><th>ออกจากจอ</th><th>เวลาที่ใช้</th><th>ส่งเมื่อ</th><th>รายละเอียด</th>
+            <th>ชื่อ</th><th>ปรนัย</th><th>รวม</th><th>ออกจากจอ</th><th>เวลา</th><th>ส่งเมื่อ</th><th>คำตอบ / ตรวจอัตนัย</th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -48,11 +49,14 @@
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
     const params = new URLSearchParams(location.search);
     const quizId = params.get('id');
     const token = params.get('token') || '';
     let qmap = {};
+    let respMc = {};
 
     async function load() {
       const res = await fetch(`/api/quizzes/${quizId}/admin?token=${encodeURIComponent(token)}`);
@@ -67,6 +71,7 @@
       const total = Object.keys(qmap).length;
       document.getElementById('qsub').textContent =
         `${total} คำถาม · ${(quiz.parts || []).length} Part · สร้างเมื่อ ${new Date(quiz.createdAt).toLocaleString('th-TH')}`;
+      document.getElementById('exportBtn').href = `/api/quizzes/${quizId}/export.csv?token=${encodeURIComponent(token)}`;
       render(quiz, responses, events);
     }
 
@@ -79,13 +84,21 @@
 
       let flagged = 0, scoreSum = 0, mcMax = 0;
       const respSessions = new Set();
+      respMc = {};
 
       const rows = responses.map((r, ri) => {
         respSessions.add(r.sessionId);
+        respMc[r.id] = r.score || 0;
         const evs = (bySession[r.sessionId] || []).sort((a, b) => a.at - b.at);
         const leaves = evs.filter((e) => e.type === 'leave').length;
         if (leaves > 0) flagged++;
         scoreSum += r.score; mcMax = Math.max(mcMax, r.mcTotal || 0);
+
+        const openSum = Object.values(r.openScores || {}).reduce((s, x) => s + (Number(x) || 0), 0);
+        const openQs = (r.detail || []).filter((d) => d.type === 'open');
+        const ungraded = openQs.filter((d) => (r.openScores || {})[d.id] === undefined).length;
+        const total = (r.score || 0) + openSum;
+        const totalCell = `<b>${total}</b>` + (ungraded ? ` <span class="pill y">รอตรวจ ${ungraded}</span>` : (openQs.length ? ' <span class="pill g">ตรวจครบ</span>' : ''));
 
         const pill = leaves === 0 ? '<span class="pill g">0 ครั้ง</span>'
           : `<span class="pill ${leaves >= 3 ? 'r' : 'y'}">${leaves} ครั้ง</span>`;
@@ -93,6 +106,7 @@
         return `<tr class="${leaves > 0 ? 'flagged' : ''}">
           <td><strong>${esc(r.name)}</strong></td>
           <td>${r.mcTotal ? r.score + '/' + r.mcTotal : '—'}</td>
+          <td id="total-${r.id}">${totalCell}</td>
           <td>${pill}${evs.length ? timeline(evs) : ''}</td>
           <td>${r.durationSec ? fmtDur(r.durationSec * 1000) : '-'}</td>
           <td class="muted">${new Date(r.submittedAt).toLocaleString('th-TH')}</td>
@@ -100,7 +114,7 @@
         </tr>`;
       }).join('');
 
-      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="6" class="muted">ยังไม่มีคนตอบ</td></tr>';
+      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="7" class="muted">ยังไม่มีคนตอบ</td></tr>';
       document.getElementById('nResp').textContent = responses.length;
       document.getElementById('nFlag').textContent = flagged;
       document.getElementById('avg').textContent = responses.length && mcMax
@@ -125,12 +139,36 @@
         const qtext = q ? esc(q.text).slice(0, 60) : 'ข้อ ' + (i + 1);
         if (d.type === 'mc') {
           const chosen = q && q.choices[d.answer] !== undefined ? esc(q.choices[d.answer]) : '(ไม่ตอบ)';
-          return `<li class="${d.correct ? 'return' : 'leave'}">${d.correct ? '✅' : '❌'} <b>${qtext}</b> → ${chosen}</li>`;
+          return `<li class="${d.correct ? 'return' : 'leave'}">${d.correct ? '✓' : '✗'} <b>${qtext}</b> → ${chosen}</li>`;
         }
-        return `<li>✍️ <b>${qtext}</b><br><span style="color:var(--ink)">${esc(d.answer || '(ไม่ตอบ)')}</span>
-          ${q && q.sampleAnswer ? `<br><span class="muted">เฉลย: ${esc(q.sampleAnswer)}</span>` : ''}</li>`;
+        const cur = (r.openScores || {})[d.id];
+        return `<li style="margin:8px 0">✍️ <b>${qtext}</b>
+          <br><span style="color:var(--ink)">${esc(d.answer || '(ไม่ตอบ)')}</span>
+          ${q && q.sampleAnswer ? `<br><span class="muted">เฉลย/แนวทาง: ${esc(q.sampleAnswer)}</span>` : ''}
+          <br><span class="muted">ให้คะแนน:</span>
+          <input class="ginput" data-resp="${r.id}" type="number" min="0" step="1" style="width:76px;padding:4px 8px"
+                 value="${cur !== undefined ? cur : ''}" placeholder="—"
+                 onchange="grade('${r.id}','${d.id}',this.value)"> คะแนน
+        </li>`;
       }).join('');
-      return `<details><summary>ดูคำตอบ</summary><ul class="timeline">${items}</ul></details>`;
+      const hasOpen = (r.detail || []).some((d) => d.type === 'open');
+      return `<details ${hasOpen ? 'open' : ''}><summary>${hasOpen ? 'คำตอบ &amp; ให้คะแนนอัตนัย' : 'ดูคำตอบ'}</summary><ul class="timeline">${items}</ul></details>`;
+    }
+
+    async function grade(responseId, questionId, val) {
+      const res = await fetch(`/api/quizzes/${quizId}/grade?token=${encodeURIComponent(token)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, questionId, score: val === '' ? '' : Number(val) }),
+      });
+      if (!res.ok) { toast('บันทึกคะแนนไม่สำเร็จ'); return; }
+      // อัปเดตคะแนนรวมของแถวนี้โดยไม่ต้องโหลดใหม่ (ไม่ให้ช่องที่กำลังตรวจปิด)
+      let openSum = 0;
+      document.querySelectorAll(`.ginput[data-resp="${responseId}"]`).forEach((el) => { openSum += Number(el.value) || 0; });
+      const anyUngraded = [...document.querySelectorAll(`.ginput[data-resp="${responseId}"]`)].some((el) => el.value === '');
+      const cell = document.getElementById('total-' + responseId);
+      if (cell) cell.innerHTML = `<b>${(respMc[responseId] || 0) + openSum}</b>` +
+        (anyUngraded ? ' <span class="pill y">รอตรวจ</span>' : ' <span class="pill g">ตรวจครบ</span>');
+      toast('บันทึกคะแนนแล้ว');
     }
 
     function timeline(evs) {
@@ -145,6 +183,11 @@
 
     function fmtDur(ms) { const s = Math.round(ms / 1000); return s < 60 ? s + ' วิ' : Math.floor(s / 60) + ' นาที ' + (s % 60) + ' วิ'; }
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1800);
+    }
     function showErr(msg) {
       document.getElementById('err').style.display = 'block';
       document.getElementById('err').innerHTML = `<h2>❌ ${esc(msg)}</h2><p class="muted"><a href="/">← กลับหน้าควิซของฉัน</a></p>`;

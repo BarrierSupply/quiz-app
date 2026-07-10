@@ -119,6 +119,7 @@ function sanitizeQuiz(body) {
     title: String(body.title || 'ควิซไม่มีชื่อ').slice(0, 200),
     description: String(body.description || '').slice(0, 2000),
     timeLimitSec: Math.max(0, Math.min(parseInt(body.timeLimitSec, 10) || 0, 24 * 3600)),
+    allowRetake: !!body.allowRetake,
     parts: cleanParts,
   };
 }
@@ -156,6 +157,7 @@ function publicQuiz(quiz) {
     title: quiz.title,
     description: quiz.description,
     timeLimitSec: quiz.timeLimitSec || 0,
+    allowRetake: !!quiz.allowRetake,
     parts: (quiz.parts || []).map((pt) => ({
       title: pt.title,
       questions: pt.questions.map((q) => ({
@@ -164,6 +166,48 @@ function publicQuiz(quiz) {
       })),
     })),
   };
+}
+
+// ---------- สร้างไฟล์ CSV ผลควิซ ----------
+function csvCell(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+function buildCsv(quiz, responses, events) {
+  const qs = allQuestions(quiz);
+  const hasOpen = qs.some((q) => q.type === 'open');
+  const leaveBySession = {};
+  events.forEach((e) => { if (e.type === 'leave') leaveBySession[e.sessionId] = (leaveBySession[e.sessionId] || 0) + 1; });
+
+  const header = ['ชื่อ', 'คะแนนปรนัย', 'คะแนนอัตนัย', 'คะแนนรวม', 'เวลาที่ใช้(วินาที)', 'ออกจากจอ(ครั้ง)', 'ส่งเมื่อ'];
+  qs.forEach((q, i) => header.push(`ข้อ${i + 1} (${q.type === 'mc' ? 'ปรนัย' : 'อัตนัย'})`));
+  const lines = [header.map(csvCell).join(',')];
+
+  responses.forEach((r) => {
+    const openSum = Object.values(r.openScores || {}).reduce((s, x) => s + (Number(x) || 0), 0);
+    const total = (r.score || 0) + openSum;
+    const byId = {};
+    (r.detail || []).forEach((d) => { byId[d.id] = d; });
+    const row = [
+      r.name,
+      r.mcTotal ? `${r.score}/${r.mcTotal}` : '-',
+      hasOpen ? openSum : '-',
+      total,
+      r.durationSec || 0,
+      leaveBySession[r.sessionId] || 0,
+      new Date(r.submittedAt).toLocaleString('th-TH'),
+    ];
+    qs.forEach((q) => {
+      const d = byId[q.id];
+      if (!d) { row.push(''); return; }
+      if (q.type === 'mc') {
+        const chosen = (d.answer >= 0 && q.choices[d.answer] !== undefined) ? q.choices[d.answer] : '(ไม่ตอบ)';
+        row.push((d.correct ? '✓ ' : '✗ ') + chosen);
+      } else {
+        const sc = (r.openScores || {})[q.id];
+        row.push((d.answer || '(ไม่ตอบ)') + (sc !== undefined ? ` [${sc} คะแนน]` : ''));
+      }
+    });
+    lines.push(row.map(csvCell).join(','));
+  });
+  return lines.join('\r\n');
 }
 
 // ---------- ไฟล์ static ----------
@@ -432,9 +476,11 @@ const server = http.createServer(async (req, res) => {
           return { id: q.id, type: 'open', answer: String(a ?? '').slice(0, 5000) };
         });
         db.responses[qid].push({
+          id: rid(6),
           sessionId: String(b.sessionId || rid(6)),
           name: String(b.name || 'ไม่ระบุชื่อ').slice(0, 100),
           detail, score, mcTotal,
+          openScores: {}, // { questionId: คะแนนที่ครูให้ }
           durationSec: Math.max(0, parseInt(b.durationSec, 10) || 0),
           submittedAt: Date.now(),
         });
@@ -462,9 +508,43 @@ const server = http.createServer(async (req, res) => {
       if (sub === 'admin' && req.method === 'GET') {
         const token = u.searchParams.get('token');
         if (!isOwner && !isAdmin(me) && token !== quiz.adminToken) return sendJson(res, 403, { error: 'ไม่มีสิทธิ์เข้าถึง' });
+        // เติม id/openScores ให้คำตอบเก่าที่ยังไม่มี (เพื่อให้ให้คะแนนได้)
+        let changed = false;
+        (db.responses[qid] || []).forEach((r) => {
+          if (!r.id) { r.id = rid(6); changed = true; }
+          if (!r.openScores) { r.openScores = {}; changed = true; }
+        });
+        if (changed) saveDb();
         return sendJson(res, 200, {
           quiz, responses: db.responses[qid] || [], events: db.events[qid] || [],
         });
+      }
+
+      // -- เจ้าของ/แอดมิน: ให้คะแนนข้ออัตนัย --
+      if (sub === 'grade' && req.method === 'POST') {
+        const token = u.searchParams.get('token');
+        if (!isOwner && !isAdmin(me) && token !== quiz.adminToken) return sendJson(res, 403, { error: 'ไม่มีสิทธิ์' });
+        const b = await readJson(req);
+        const resp = (db.responses[qid] || []).find((r) => r.id === b.responseId);
+        if (!resp) return sendJson(res, 404, { error: 'ไม่พบคำตอบนี้' });
+        if (!resp.openScores) resp.openScores = {};
+        const score = Math.max(0, Math.min(Number(b.score) || 0, 100000));
+        if (b.score === '' || b.score === null) delete resp.openScores[String(b.questionId)];
+        else resp.openScores[String(b.questionId)] = score;
+        saveDb();
+        return sendJson(res, 200, { ok: true });
+      }
+
+      // -- เจ้าของ/มี token: ดาวน์โหลดผลเป็น CSV --
+      if (sub === 'export.csv' && req.method === 'GET') {
+        const token = u.searchParams.get('token');
+        if (!isOwner && !isAdmin(me) && token !== quiz.adminToken) return sendJson(res, 403, { error: 'ไม่มีสิทธิ์' });
+        const csv = buildCsv(quiz, db.responses[qid] || [], db.events[qid] || []);
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="quiz-${qid}-results.csv"`,
+        });
+        return res.end('﻿' + csv); // BOM ให้ Excel อ่านภาษาไทยถูก
       }
     }
 

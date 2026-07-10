@@ -70,12 +70,26 @@
       questions = (quiz.parts || []).flatMap((pt) => pt.questions);
       document.getElementById('qtitle').textContent = quiz.title;
       document.getElementById('qdesc').textContent = quiz.description || '';
+
+      // กันทำซ้ำ: ถ้าไม่อนุญาต และเคยส่งจากเครื่องนี้แล้ว
+      const done = getDone();
+      if (!quiz.allowRetake && done) {
+        document.getElementById('intro').innerHTML =
+          `<h2>คุณทำควิซนี้ไปแล้ว ✓</h2>
+           <p class="muted">ส่งคำตอบในนาม <b>${escapeHtml(done.name)}</b> เมื่อ ${new Date(done.at).toLocaleString('th-TH')}</p>
+           <p class="muted">ควิซนี้ทำได้ครั้งเดียว หากต้องการทำใหม่ กรุณาติดต่อผู้จัดทำ</p>`;
+        document.getElementById('intro').style.display = 'block';
+        return;
+      }
+
       if (quiz.timeLimitSec > 0) {
         document.getElementById('timeNote').innerHTML =
-          `⏱️ ควิซนี้มีเวลาจำกัด <b>${Math.round(quiz.timeLimitSec / 60)} นาที</b> — เริ่มจับเวลาเมื่อกด "เริ่มทำควิซ"`;
+          `ควิซนี้มีเวลาจำกัด <b>${Math.round(quiz.timeLimitSec / 60)} นาที</b> — เริ่มจับเวลาเมื่อกด "เริ่มทำควิซ"`;
       }
       document.getElementById('intro').style.display = 'block';
     }
+    function getDone() { try { return JSON.parse(localStorage.getItem('quizDone_' + quizId) || 'null'); } catch { return null; } }
+    function setDone(name) { try { localStorage.setItem('quizDone_' + quizId, JSON.stringify({ name, at: Date.now() })); } catch (_) {} }
     function fail(msg) { document.getElementById('qtitle').textContent = msg; }
 
     function start() {
@@ -206,6 +220,7 @@
         body: JSON.stringify({ sessionId, name: userName, answers, durationSec }),
       });
       const data = await res.json();
+      setDone(userName); // จำว่าเครื่องนี้ส่งแล้ว (กันทำซ้ำ)
 
       document.getElementById('quizForm').style.display = 'none';
       document.getElementById('submitRow').style.display = 'none';

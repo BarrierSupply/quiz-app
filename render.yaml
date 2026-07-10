@@ -9,7 +9,7 @@ services:
       - key: DATA_DIR
         value: /var/data
       - key: ADMIN_EMAIL
-        sync: false
+        value: admin12345@teacher.com
     disk:
       name: quiz-data
       mountPath: /var/data

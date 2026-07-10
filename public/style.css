@@ -137,3 +137,73 @@ summary { cursor: pointer; color: var(--brand-dark); font-size: .85rem; }
   background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 10px;
   opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
 .toast.show { opacity: 1; }
+
+/* ---------- ล็อกอิน ---------- */
+.auth-wrap { max-width: 400px; margin: 8vh auto; padding: 0 16px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.tabs button { flex: 1; padding: 10px; border: 0; background: #eef0fb; color: var(--muted);
+  border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.tabs button.active { background: var(--brand); color: #fff; }
+.err { color: var(--bad); font-size: .88rem; margin: 8px 0 0; min-height: 1em; }
+
+/* ---------- แถบบนแอป ---------- */
+.appbar { background: #fff; border-bottom: 1px solid var(--line); padding: 12px 20px;
+  display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 40; }
+.appbar .brand { font-weight: 800; color: var(--brand); font-size: 1.1rem; }
+.appbar .email { color: var(--muted); font-size: .85rem; }
+
+/* ---------- การ์ดควิซในแดชบอร์ด ---------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.qz { background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.qz h3 { margin: 0; font-size: 1.02rem; }
+.qz .meta { color: var(--muted); font-size: .82rem; }
+.qz .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
+
+/* สวิตช์เปิด/ปิด */
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: .85rem; font-weight: 600; }
+.switch input { display: none; }
+.switch .track { width: 42px; height: 24px; border-radius: 999px; background: #cbd0e0; position: relative; transition: background .18s; flex: none; }
+.switch .track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; transition: transform .18s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked + .track { background: var(--ok); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+
+/* ---------- ตัวสร้าง Part / คำถาม ---------- */
+.part { border: 2px solid #dfe1f5; border-radius: 14px; padding: 14px; margin: 16px 0; background: #fafaff; }
+.part-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.part-head .tagp { background: #7c5bd6; color: #fff; padding: 3px 10px; border-radius: 8px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.part-head input { font-weight: 700; }
+
+textarea.q-text { min-height: 46px; overflow: hidden; resize: none; line-height: 1.5; }
+
+.qtype { display: flex; gap: 6px; margin: 4px 0 10px; }
+.qtype button { border: 1px solid var(--line); background: #fff; color: var(--muted);
+  padding: 5px 12px; border-radius: 8px; font: inherit; font-size: .82rem; cursor: pointer; }
+.qtype button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* สื่อในคำถาม */
+.media-bar { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.media-bar .btn.sm { background: #eef0fb; color: var(--brand-dark); }
+.media-preview { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.media-preview .thumb { position: relative; width: 84px; height: 84px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.media-preview .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.media-preview .thumb .x { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.6); color: #fff;
+  border: 0; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: .8rem; line-height: 1; }
+.media-preview video, .media-preview audio { max-width: 260px; }
+.media-preview .mwrap { position: relative; }
+.media-preview .mwrap .x { position: absolute; top: -6px; right: -6px; background: var(--bad); color: #fff; border: 0; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; }
+
+/* ---------- ทำควิซ ---------- */
+.timer-bar { position: sticky; top: 0; z-index: 45; background: #fff; border-bottom: 1px solid var(--line);
+  padding: 10px 16px; display: flex; align-items: center; gap: 14px; }
+.timer-bar .who { font-weight: 700; }
+.timer-bar .clock { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.1rem;
+  background: #f2f2fd; color: var(--brand-dark); padding: 4px 12px; border-radius: 10px; }
+.timer-bar .clock.warn { background: #fee2e2; color: var(--bad); }
+.progress { flex: 1; height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; max-width: 320px; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .3s; }
+.q-media img { max-width: 100%; border-radius: 10px; margin: 6px 0; }
+.q-media video { max-width: 100%; border-radius: 10px; margin: 6px 0; }
+.part-title { font-size: 1.1rem; font-weight: 800; color: #7c5bd6; margin: 22px 0 4px; padding-left: 4px; border-left: 4px solid #7c5bd6; }
+.open-answer { width: 100%; min-height: 90px; }

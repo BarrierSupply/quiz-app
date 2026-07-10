@@ -3,160 +3,327 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>สร้างควิซ</title>
+  <title>ควิซของฉัน</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="top">
-    <h1>📝 สร้างควิซออนไลน์</h1>
-    <p>1 โจทย์ 4 ช้อย · แชร์ให้คนอื่นเข้าตอบ · ดูได้ว่าใครปัดออกจากหน้าจอ</p>
-  </header>
+  <div class="appbar">
+    <span class="brand">📝 ควิซออนไลน์</span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="email" id="meEmail"></span>
+    <button class="btn ghost sm" onclick="logout()">ออกจากระบบ</button>
+  </div>
 
-  <div class="wrap">
-    <!-- ฟอร์มสร้าง -->
-    <div id="builder">
-      <div class="card">
-        <label>ชื่อควิซ</label>
-        <input type="text" id="title" placeholder="เช่น แบบทดสอบวิชาวิทยาศาสตร์ บทที่ 1">
-        <label>คำอธิบาย (ไม่บังคับ)</label>
-        <textarea id="desc" placeholder="รายละเอียดสั้น ๆ ให้ผู้ตอบ"></textarea>
-      </div>
+  <!-- ===== แดชบอร์ด (หน้า base) ===== -->
+  <div class="wrap" id="dashView">
+    <div class="row" style="margin-bottom:8px">
+      <h2 style="margin:0">🗂️ ควิซของฉัน</h2>
+      <div class="spacer"></div>
+      <button class="btn" onclick="newQuiz()">➕ สร้างควิซใหม่</button>
+    </div>
+    <div class="grid" id="quizGrid"></div>
+    <div id="emptyState" class="card" style="display:none;text-align:center">
+      <p class="muted">ยังไม่มีควิซ — กด "สร้างควิซใหม่" เพื่อเริ่ม</p>
+    </div>
+  </div>
 
-      <div id="questions"></div>
-
-      <div class="row">
-        <button class="btn ghost" onclick="addQuestion()">➕ เพิ่มคำถาม</button>
-        <div class="spacer"></div>
-        <button class="btn" onclick="publish()">✅ สร้างควิซ &amp; รับลิงก์</button>
-      </div>
+  <!-- ===== ตัวสร้าง/แก้ไขควิซ ===== -->
+  <div class="wrap" id="editView" style="display:none">
+    <div class="row" style="margin-bottom:6px">
+      <button class="btn ghost sm" onclick="backToDash()">← กลับ</button>
+      <div class="spacer"></div>
+      <span class="muted" id="editMode"></span>
     </div>
 
-    <!-- ผลลัพธ์หลังสร้าง -->
-    <div id="done" class="card" style="display:none">
-      <h2>🎉 สร้างควิซเรียบร้อย!</h2>
-      <div class="share-box">
-        <strong>🔗 ลิงก์สำหรับผู้ตอบ</strong> (ส่งอันนี้ให้คนอื่น)
-        <code id="shareLink"></code>
-        <button class="btn sm" onclick="copy('shareLink')">คัดลอกลิงก์ตอบ</button>
-      </div>
-      <div class="share-box">
-        <strong>📊 ลิงก์ดูผล &amp; ระบบตรวจจับการออกจากจอ</strong> (เก็บไว้ส่วนตัว!)
-        <code id="adminLink"></code>
-        <button class="btn sm" onclick="copy('adminLink')">คัดลอกลิงก์ดูผล</button>
-        <a class="btn sm ghost" id="openAdmin" href="#" target="_blank">เปิดแดชบอร์ด →</a>
-      </div>
-      <p class="muted">⚠️ เก็บลิงก์ดูผลไว้ให้ดี ถ้าหายจะเข้าดูผลไม่ได้ (ระบบบันทึกไว้ในเบราว์เซอร์นี้ให้แล้วด้านล่าง)</p>
-      <button class="btn ghost" onclick="location.reload()">＋ สร้างควิซใหม่</button>
+    <div class="card">
+      <label>ชื่อควิซ</label>
+      <input type="text" id="qTitle" placeholder="เช่น ข้อสอบกลางภาค วิชาวิทยาศาสตร์">
+      <label>คำอธิบาย (ไม่บังคับ)</label>
+      <textarea id="qDesc" placeholder="รายละเอียดให้ผู้ทำ"></textarea>
+      <label>⏱️ เวลาทำควิซ (นาที) — ใส่ 0 = ไม่จำกัดเวลา</label>
+      <input type="number" id="qTime" min="0" value="0" style="max-width:160px">
+      <p class="muted">ตัวจับเวลาจะเริ่มนับหลังผู้ทำกรอกชื่อและเข้าสู่หน้าโจทย์ และแสดงให้ผู้ทำเห็น</p>
     </div>
 
-    <!-- ควิซที่เคยสร้างในเครื่องนี้ -->
-    <div id="mine" class="card" style="display:none">
-      <h2>🗂️ ควิซที่คุณสร้างไว้ (ในเบราว์เซอร์นี้)</h2>
-      <div id="mineList"></div>
+    <div id="parts"></div>
+
+    <div class="row">
+      <button class="btn ghost" onclick="addPart()">➕ เพิ่ม Part</button>
+      <div class="spacer"></div>
+      <button class="btn" id="saveBtn" onclick="saveQuiz()">💾 บันทึกควิซ</button>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
-    let questions = [];
+    let meEmail = '';
+    let state = null; // { quizId, title, description, timeLimitMin, parts:[] }
 
-    function addQuestion(data) {
-      questions.push(data || { text: '', choices: ['', '', '', ''], correct: 0 });
-      render();
+    // ---------- เริ่มต้น: เช็คล็อกอิน ----------
+    async function init() {
+      const r = await fetch('/api/me');
+      if (!r.ok) { location.href = '/login'; return; }
+      meEmail = (await r.json()).email;
+      document.getElementById('meEmail').textContent = meEmail;
+      loadDashboard();
     }
-    function removeQuestion(i) { questions.splice(i, 1); render(); }
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      location.href = '/login';
+    }
 
-    function render() {
-      const box = document.getElementById('questions');
-      box.innerHTML = '';
-      questions.forEach((q, i) => {
-        const el = document.createElement('div');
-        el.className = 'q-card';
-        el.innerHTML = `
-          <div class="q-head">
-            <div class="q-num">${i + 1}</div>
-            <input type="text" placeholder="พิมพ์คำถามข้อที่ ${i + 1}"
-                   value="${esc(q.text)}" oninput="questions[${i}].text=this.value">
-            <button class="btn ghost sm" onclick="removeQuestion(${i})" title="ลบข้อนี้">🗑️</button>
+    // ---------- แดชบอร์ด ----------
+    async function loadDashboard() {
+      document.getElementById('editView').style.display = 'none';
+      document.getElementById('dashView').style.display = 'block';
+      const { quizzes } = await (await fetch('/api/my-quizzes')).json();
+      const grid = document.getElementById('quizGrid');
+      document.getElementById('emptyState').style.display = quizzes.length ? 'none' : 'block';
+      grid.innerHTML = quizzes.map((q) => `
+        <div class="qz">
+          <h3>${esc(q.title)}</h3>
+          <div class="meta">${q.questionCount} ข้อ · ${q.partCount} Part · ${q.responseCount} คนตอบ
+            ${q.timeLimitSec ? '· ⏱️ ' + Math.round(q.timeLimitSec / 60) + ' นาที' : ''}</div>
+          <label class="switch">
+            <input type="checkbox" ${q.enabled ? 'checked' : ''} onchange="toggle('${q.id}', this.checked)">
+            <span class="track"></span>
+            <span>${q.enabled ? 'เปิดใช้งานอยู่' : 'ปิดอยู่'}</span>
+          </label>
+          <div class="actions">
+            <button class="btn sm ghost" onclick="editQuiz('${q.id}')">✏️ แก้ไข</button>
+            <a class="btn sm ghost" href="/admin?id=${q.id}&token=${q.adminToken}" target="_blank">📊 ผล</a>
+            <button class="btn sm ghost" onclick="copyShare('${q.id}', ${q.enabled})">🔗 ลิงก์</button>
+            <button class="btn sm ghost" onclick="delQuiz('${q.id}','${esc(q.title)}')">🗑️</button>
           </div>
-          <div class="muted" style="font-size:.8rem;margin-bottom:4px">เลือกวงกลมหน้าตัวเลือกที่เป็น "คำตอบที่ถูก"</div>
-          ${[0, 1, 2, 3].map((c) => `
-            <div class="choice-row">
-              <input type="radio" name="correct-${i}" ${q.correct === c ? 'checked' : ''}
-                     onchange="questions[${i}].correct=${c}">
-              <span class="tag">${q.correct === c ? '✔ ถูก' : 'ช้อย ' + 'ABCD'[c]}</span>
-              <input type="text" placeholder="ตัวเลือก ${'ABCD'[c]}"
-                     value="${esc(q.choices[c])}" oninput="questions[${i}].choices[${c}]=this.value">
-            </div>`).join('')}
-        `;
-        box.appendChild(el);
-      });
-    }
-
-    function esc(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-
-    async function publish() {
-      const title = document.getElementById('title').value.trim();
-      const description = document.getElementById('desc').value.trim();
-      const clean = questions.filter((q) => q.text.trim() && q.choices.some((c) => c.trim()));
-      if (!title) return toast('ใส่ชื่อควิซก่อนนะ');
-      if (clean.length === 0) return toast('ต้องมีคำถามอย่างน้อย 1 ข้อ');
-
-      const res = await fetch('/api/quizzes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, questions: clean }),
-      });
-      const data = await res.json();
-      if (!res.ok) return toast(data.error || 'เกิดข้อผิดพลาด');
-
-      const base = location.origin;
-      const shareUrl = `${base}/take?id=${data.id}`;
-      const adminUrl = `${base}/admin?id=${data.id}&token=${data.adminToken}`;
-      document.getElementById('shareLink').textContent = shareUrl;
-      document.getElementById('adminLink').textContent = adminUrl;
-      document.getElementById('openAdmin').href = adminUrl;
-      document.getElementById('builder').style.display = 'none';
-      document.getElementById('done').style.display = 'block';
-
-      saveMine({ id: data.id, title, adminUrl, shareUrl, at: Date.now() });
-      window.scrollTo(0, 0);
-    }
-
-    // ---- เก็บควิซที่ตัวเองสร้างไว้ในเครื่อง ----
-    function saveMine(item) {
-      const list = JSON.parse(localStorage.getItem('myQuizzes') || '[]');
-      list.unshift(item);
-      localStorage.setItem('myQuizzes', JSON.stringify(list.slice(0, 50)));
-    }
-    function showMine() {
-      const list = JSON.parse(localStorage.getItem('myQuizzes') || '[]');
-      if (!list.length) return;
-      document.getElementById('mine').style.display = 'block';
-      document.getElementById('mineList').innerHTML = list.map((q) => `
-        <div class="row" style="border-bottom:1px solid var(--line);padding:8px 0">
-          <div><strong>${esc(q.title)}</strong><br>
-            <span class="muted" style="font-size:.8rem">${new Date(q.at).toLocaleString('th-TH')}</span></div>
-          <div class="spacer"></div>
-          <a class="btn sm ghost" href="${q.shareUrl}" target="_blank">ลิงก์ตอบ</a>
-          <a class="btn sm" href="${q.adminUrl}" target="_blank">ดูผล 📊</a>
         </div>`).join('');
     }
 
-    function copy(id) {
-      navigator.clipboard.writeText(document.getElementById(id).textContent)
-        .then(() => toast('คัดลอกแล้ว!'));
+    async function toggle(id, enabled) {
+      await fetch(`/api/quizzes/${id}/toggle`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      loadDashboard();
+      toast(enabled ? 'เปิดใช้งานควิซแล้ว ✅' : 'ปิดควิซแล้ว');
     }
+    function copyShare(id, enabled) {
+      const url = `${location.origin}/take?id=${id}`;
+      navigator.clipboard.writeText(url);
+      toast(enabled ? 'คัดลอกลิงก์ตอบแล้ว!' : 'คัดลอกแล้ว (อย่าลืมเปิดใช้งานควิซก่อน)');
+    }
+    async function delQuiz(id, title) {
+      if (!confirm(`ลบควิซ "${title}" ? ข้อมูลคำตอบทั้งหมดจะถูกลบด้วย`)) return;
+      await fetch(`/api/quizzes/${id}`, { method: 'DELETE' });
+      loadDashboard();
+      toast('ลบควิซแล้ว');
+    }
+
+    // ---------- สร้าง/แก้ไข ----------
+    function blankQuestion(type = 'mc') {
+      return { id: 'q' + Math.random().toString(36).slice(2, 8), type,
+        text: '', media: { images: [], video: '', audio: '' },
+        choices: type === 'mc' ? ['', '', '', ''] : [], correct: 0, sampleAnswer: '' };
+    }
+    function blankPart(n) { return { id: 'p' + Math.random().toString(36).slice(2, 8), title: 'Part ' + n, questions: [blankQuestion()] }; }
+
+    function newQuiz() {
+      state = { quizId: null, title: '', description: '', timeLimitMin: 0, parts: [blankPart(1)] };
+      openEditor('สร้างควิซใหม่');
+    }
+    async function editQuiz(id) {
+      const r = await fetch(`/api/quizzes/${id}/edit`);
+      if (!r.ok) return toast('โหลดควิซไม่สำเร็จ');
+      const { quiz } = await r.json();
+      state = {
+        quizId: id, title: quiz.title, description: quiz.description,
+        timeLimitMin: Math.round((quiz.timeLimitSec || 0) / 60),
+        parts: (quiz.parts || []).map((pt) => ({
+          id: pt.id, title: pt.title,
+          questions: pt.questions.map((q) => ({
+            id: q.id, type: q.type, text: q.text,
+            media: { images: q.media?.images || [], video: q.media?.video || '', audio: q.media?.audio || '' },
+            choices: q.choices || [], correct: q.correct || 0, sampleAnswer: q.sampleAnswer || '',
+          })),
+        })),
+      };
+      if (!state.parts.length) state.parts = [blankPart(1)];
+      openEditor('แก้ไขควิซ');
+    }
+
+    function openEditor(modeLabel) {
+      document.getElementById('dashView').style.display = 'none';
+      document.getElementById('editView').style.display = 'block';
+      document.getElementById('editMode').textContent = modeLabel;
+      document.getElementById('qTitle').value = state.title;
+      document.getElementById('qDesc').value = state.description;
+      document.getElementById('qTime').value = state.timeLimitMin;
+      renderParts();
+      window.scrollTo(0, 0);
+    }
+    function backToDash() { if (confirm('กลับหน้าแดชบอร์ด? การแก้ไขที่ยังไม่บันทึกจะหาย')) loadDashboard(); }
+
+    // ---------- render ตัวสร้าง ----------
+    function renderParts() {
+      const box = document.getElementById('parts');
+      box.innerHTML = state.parts.map((pt, pi) => `
+        <div class="part">
+          <div class="part-head">
+            <span class="tagp">Part ${pi + 1}</span>
+            <input type="text" placeholder="ชื่อ Part (เช่น ความรู้ทั่วไป)" value="${escAttr(pt.title)}"
+                   oninput="state.parts[${pi}].title=this.value">
+            <button class="btn ghost sm" onclick="removePart(${pi})" title="ลบ Part">🗑️</button>
+          </div>
+          ${pt.questions.map((q, qi) => renderQuestion(pi, qi, q)).join('')}
+          <button class="btn ghost sm" onclick="addQuestion(${pi})">➕ เพิ่มคำถามใน Part นี้</button>
+        </div>`).join('');
+      autosizeAll();
+    }
+
+    function renderQuestion(pi, qi, q) {
+      const idx = `${pi},${qi}`;
+      return `
+        <div class="q-card">
+          <div class="q-head">
+            <div class="q-num">${qi + 1}</div>
+            <textarea class="q-text" placeholder="พิมพ์คำถาม (ตัดบรรทัดได้ ข้อความยาวแค่ไหนก็อ่านครบ)"
+                      oninput="state.parts[${pi}].questions[${qi}].text=this.value;autosize(this)">${esc(q.text)}</textarea>
+            <button class="btn ghost sm" onclick="removeQuestion(${idx})" title="ลบข้อนี้">🗑️</button>
+          </div>
+
+          <div class="qtype">
+            <button class="${q.type === 'mc' ? 'on' : ''}" onclick="setType(${idx},'mc')">◉ ปรนัย (เลือกช้อย)</button>
+            <button class="${q.type === 'open' ? 'on' : ''}" onclick="setType(${idx},'open')">✍️ อัตนัย (เขียนตอบ)</button>
+          </div>
+
+          <div class="media-bar">
+            <button class="btn sm" onclick="pickMedia(${idx},'image')">🖼️ รูป (${q.media.images.length}/4)</button>
+            <button class="btn sm" onclick="pickMedia(${idx},'video')">🎬 วิดีโอ</button>
+            <button class="btn sm" onclick="pickMedia(${idx},'audio')">🔊 เสียง</button>
+          </div>
+          ${renderMediaPreview(pi, qi, q)}
+
+          ${q.type === 'mc' ? renderChoices(pi, qi, q) : `
+            <label>เฉลย/แนวคำตอบ (ไว้เทียบตอนตรวจ — ไม่บังคับ)</label>
+            <textarea placeholder="ตัวอย่างคำตอบที่ถูก" oninput="state.parts[${pi}].questions[${qi}].sampleAnswer=this.value">${esc(q.sampleAnswer)}</textarea>
+            <p class="muted">อัตนัยจะเก็บคำตอบไว้ให้ตรวจเองในแดชบอร์ด (ไม่ให้คะแนนอัตโนมัติ)</p>`}
+        </div>`;
+    }
+
+    function renderMediaPreview(pi, qi, q) {
+      const m = q.media;
+      if (!m.images.length && !m.video && !m.audio) return '';
+      let html = '<div class="media-preview">';
+      m.images.forEach((url, ii) => {
+        html += `<div class="thumb"><img src="${url}"><button class="x" onclick="removeImage(${pi},${qi},${ii})">×</button></div>`;
+      });
+      if (m.video) html += `<div class="mwrap"><video src="${m.video}" controls></video><button class="x" onclick="removeMedia(${pi},${qi},'video')">×</button></div>`;
+      if (m.audio) html += `<div class="mwrap"><audio src="${m.audio}" controls></audio><button class="x" onclick="removeMedia(${pi},${qi},'audio')">×</button></div>`;
+      html += '</div>';
+      return html;
+    }
+
+    function renderChoices(pi, qi, q) {
+      return `
+        <div class="muted" style="font-size:.8rem;margin:4px 0">เลือกวงกลมหน้าตัวเลือกที่เป็น "คำตอบที่ถูก"</div>
+        ${q.choices.map((c, ci) => `
+          <div class="choice-row">
+            <input type="radio" name="c-${pi}-${qi}" ${q.correct === ci ? 'checked' : ''} onchange="setCorrect(${pi},${qi},${ci})">
+            <span class="tag" style="color:${q.correct === ci ? 'var(--ok)' : 'var(--muted)'}">${q.correct === ci ? '✔ ถูก' : 'ช้อย ' + (ci + 1)}</span>
+            <input type="text" placeholder="ตัวเลือกที่ ${ci + 1}" value="${escAttr(c)}"
+                   oninput="state.parts[${pi}].questions[${qi}].choices[${ci}]=this.value">
+            ${q.choices.length > 2 ? `<button class="btn ghost sm" onclick="removeChoice(${pi},${qi},${ci})">✕</button>` : ''}
+          </div>`).join('')}
+        ${q.choices.length < 10 ? `<button class="btn ghost sm" onclick="addChoice(${pi},${qi})">➕ เพิ่มช้อย</button>` : ''}`;
+    }
+
+    // ---------- แก้ไข state ----------
+    function addPart() { state.parts.push(blankPart(state.parts.length + 1)); renderParts(); }
+    function removePart(pi) {
+      if (state.parts.length === 1) return toast('ต้องมีอย่างน้อย 1 Part');
+      if (!confirm('ลบ Part นี้พร้อมคำถามทั้งหมด?')) return;
+      state.parts.splice(pi, 1); renderParts();
+    }
+    function addQuestion(pi) { state.parts[pi].questions.push(blankQuestion()); renderParts(); }
+    function removeQuestion(pi, qi) { state.parts[pi].questions.splice(qi, 1); if (!state.parts[pi].questions.length) state.parts[pi].questions.push(blankQuestion()); renderParts(); }
+    function setType(pi, qi, type) {
+      const q = state.parts[pi].questions[qi];
+      q.type = type;
+      if (type === 'mc' && q.choices.length < 2) q.choices = ['', '', '', ''];
+      renderParts();
+    }
+    function setCorrect(pi, qi, ci) { state.parts[pi].questions[qi].correct = ci; renderParts(); }
+    function addChoice(pi, qi) { state.parts[pi].questions[qi].choices.push(''); renderParts(); }
+    function removeChoice(pi, qi, ci) {
+      const q = state.parts[pi].questions[qi];
+      q.choices.splice(ci, 1);
+      if (q.correct >= q.choices.length) q.correct = 0;
+      renderParts();
+    }
+    function removeImage(pi, qi, ii) { state.parts[pi].questions[qi].media.images.splice(ii, 1); renderParts(); }
+    function removeMedia(pi, qi, kind) { state.parts[pi].questions[qi].media[kind] = ''; renderParts(); }
+
+    // ---------- อัปโหลดสื่อ ----------
+    function pickMedia(pi, qi, kind) {
+      const q = state.parts[pi].questions[qi];
+      if (kind === 'image' && q.media.images.length >= 4) return toast('ใส่รูปได้สูงสุด 4 รูป');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = kind === 'image' ? 'image/*' : kind === 'video' ? 'video/*' : 'audio/*';
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        toast('กำลังอัปโหลด…');
+        const res = await fetch('/api/upload?name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
+        const data = await res.json();
+        if (!res.ok) return toast(data.error || 'อัปโหลดไม่สำเร็จ');
+        if (kind === 'image') q.media.images.push(data.url);
+        else q.media[kind] = data.url;
+        renderParts();
+        toast('อัปโหลดแล้ว ✅');
+      };
+      input.click();
+    }
+
+    // ---------- บันทึก ----------
+    async function saveQuiz() {
+      state.title = document.getElementById('qTitle').value.trim();
+      state.description = document.getElementById('qDesc').value.trim();
+      state.timeLimitMin = Math.max(0, parseInt(document.getElementById('qTime').value, 10) || 0);
+      if (!state.title) return toast('ใส่ชื่อควิซก่อน');
+
+      const payload = {
+        title: state.title, description: state.description,
+        timeLimitSec: state.timeLimitMin * 60,
+        parts: state.parts,
+      };
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      let res;
+      if (state.quizId) {
+        res = await fetch(`/api/quizzes/${state.quizId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      } else {
+        res = await fetch('/api/quizzes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      }
+      btn.disabled = false;
+      const data = await res.json();
+      if (!res.ok) return toast(data.error || 'บันทึกไม่สำเร็จ');
+      toast('บันทึกแล้ว ✅');
+      loadDashboard();
+    }
+
+    // ---------- utility ----------
+    function autosize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight) + 'px'; }
+    function autosizeAll() { document.querySelectorAll('textarea.q-text').forEach(autosize); }
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
     function toast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg; t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 1800);
+      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1800);
     }
 
-    // เริ่มต้นด้วย 1 คำถาม
-    addQuestion();
-    showMine();
+    init();
   </script>
 </body>
 </html>

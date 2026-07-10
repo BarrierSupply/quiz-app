@@ -9,23 +9,30 @@
 <body>
   <div class="leave-banner" id="banner">⚠️ ตรวจพบว่าคุณออกจากหน้าจอ — ผู้สร้างควิซจะเห็นบันทึกนี้</div>
 
-  <header class="top">
+  <!-- แถบเวลา + ชื่อ + progress (โผล่เฉพาะตอนทำ) -->
+  <div class="timer-bar" id="timerBar" style="display:none">
+    <span class="who">👤 <span id="whoName"></span></span>
+    <div class="progress"><i id="progFill"></i></div>
+    <span class="muted" id="progText">0%</span>
+    <span class="clock" id="clock" style="display:none">--:--</span>
+  </div>
+
+  <header class="top" id="head">
     <h1 id="qtitle">กำลังโหลด…</h1>
     <p id="qdesc"></p>
   </header>
 
   <div class="wrap">
-    <!-- ขั้นใส่ชื่อ -->
+    <!-- ใส่ชื่อ -->
     <div id="intro" class="card" style="display:none">
       <h2>ก่อนเริ่มทำ</h2>
       <label>ชื่อของคุณ</label>
       <input type="text" id="name" placeholder="พิมพ์ชื่อ-นามสกุล หรือชื่อเล่น">
-      <p class="muted">📌 ระหว่างทำ ระบบจะบันทึกหากคุณ <b>สลับแท็บ / ย่อจอ / ปัดออกจากหน้านี้</b>
-        เพื่อความโปร่งใสในการทำแบบทดสอบ</p>
+      <p class="muted" id="timeNote"></p>
+      <p class="muted">📌 ระหว่างทำ ระบบจะบันทึกหากคุณ <b>สลับแท็บ / ย่อจอ / ปัดออกจากหน้านี้</b> เพื่อความโปร่งใส</p>
       <button class="btn" onclick="start()">เริ่มทำควิซ →</button>
     </div>
 
-    <!-- ตัวควิซ -->
     <form id="quizForm" style="display:none"></form>
     <div id="submitRow" class="row" style="display:none">
       <div class="muted" id="leaveCounter">ยังไม่ออกจากหน้าจอ 👍</div>
@@ -33,13 +40,13 @@
       <button class="btn" onclick="submitQuiz()">ส่งคำตอบ</button>
     </div>
 
-    <!-- ผลลัพธ์ -->
     <div id="result" class="card" style="display:none">
       <h2>✅ ส่งคำตอบเรียบร้อย</h2>
       <div class="stat">
-        <div><div class="n" id="score">-</div><div class="l">คะแนนที่ได้</div></div>
-        <div><div class="n" id="leaveResult">-</div><div class="l">จำนวนครั้งที่ออกจากจอ</div></div>
+        <div><div class="n" id="score">-</div><div class="l">คะแนนปรนัย</div></div>
+        <div><div class="n" id="leaveResult">-</div><div class="l">ครั้งที่ออกจากจอ</div></div>
       </div>
+      <p class="muted" id="openNote"></p>
       <p class="muted">ขอบคุณที่ทำแบบทดสอบ 🙏</p>
     </div>
   </div>
@@ -47,136 +54,172 @@
   <script>
     const params = new URLSearchParams(location.search);
     const quizId = params.get('id');
-    let quiz = null;
+    let quiz = null, questions = [];
     let sessionId = 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    let userName = '';
-    let leaveCount = 0;
-    let hiddenAt = 0;
-    let finished = false;
+    let userName = '', leaveCount = 0, hiddenAt = 0, finished = false;
+    let startTime = 0, timerInt = null;
 
     async function load() {
-      if (!quizId) { document.getElementById('qtitle').textContent = 'ลิงก์ไม่ถูกต้อง'; return; }
+      if (!quizId) return fail('ลิงก์ไม่ถูกต้อง');
       const res = await fetch(`/api/quizzes/${quizId}`);
-      if (!res.ok) { document.getElementById('qtitle').textContent = 'ไม่พบควิซนี้'; return; }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        return fail(e.error || 'ไม่พบควิซนี้');
+      }
       quiz = await res.json();
+      questions = (quiz.parts || []).flatMap((pt) => pt.questions);
       document.getElementById('qtitle').textContent = quiz.title;
       document.getElementById('qdesc').textContent = quiz.description || '';
+      if (quiz.timeLimitSec > 0) {
+        document.getElementById('timeNote').innerHTML =
+          `⏱️ ควิซนี้มีเวลาจำกัด <b>${Math.round(quiz.timeLimitSec / 60)} นาที</b> — เริ่มจับเวลาเมื่อกด "เริ่มทำควิซ"`;
+      }
       document.getElementById('intro').style.display = 'block';
     }
+    function fail(msg) { document.getElementById('qtitle').textContent = msg; }
 
     function start() {
       userName = document.getElementById('name').value.trim();
-      if (!userName) { alert('กรุณาใส่ชื่อก่อนเริ่มทำ'); return; }
+      if (!userName) return alert('กรุณาใส่ชื่อก่อนเริ่มทำ');
       document.getElementById('intro').style.display = 'none';
+      document.getElementById('head').style.display = 'none';
+      document.getElementById('whoName').textContent = userName;
+      document.getElementById('timerBar').style.display = 'flex';
 
+      // สร้างแบบฟอร์มตาม Part
+      let html = '', gi = 0;
+      quiz.parts.forEach((pt) => {
+        if (pt.title) html += `<div class="part-title">${escapeHtml(pt.title)}</div>`;
+        pt.questions.forEach((q) => { html += renderQ(q, gi); gi++; });
+      });
       const form = document.getElementById('quizForm');
+      form.innerHTML = html;
       form.style.display = 'block';
-      form.innerHTML = quiz.questions.map((q, i) => `
-        <div class="card">
-          <h2>ข้อ ${i + 1}. ${escapeHtml(q.text)}</h2>
-          ${q.choices.map((c, ci) => c.trim() === '' ? '' : `
-            <label class="opt" id="opt-${i}-${ci}">
-              <input type="radio" name="q${i}" value="${ci}" onchange="selectOpt(${i},${ci})">
-              <span class="letter">${'ABCD'[ci]}</span>
-              <span>${escapeHtml(c)}</span>
-            </label>`).join('')}
-        </div>`).join('');
       document.getElementById('submitRow').style.display = 'flex';
 
+      startTime = Date.now();
+      if (quiz.timeLimitSec > 0) startTimer(quiz.timeLimitSec);
+      updateProgress();
       enableLeaveTracking();
     }
 
-    function selectOpt(i, ci) {
-      quiz.questions[i].choices.forEach((_, k) => {
-        const el = document.getElementById(`opt-${i}-${k}`);
-        if (el) el.classList.toggle('sel', k === ci);
-      });
+    function renderQ(q, gi) {
+      const m = q.media || {};
+      let media = '<div class="q-media">';
+      (m.images || []).forEach((url) => { media += `<img src="${url}" alt="">`; });
+      if (m.video) media += `<video src="${m.video}" controls></video>`;
+      if (m.audio) media += `<div><audio src="${m.audio}" controls></audio></div>`;
+      media += '</div>';
+
+      let body;
+      if (q.type === 'mc') {
+        body = q.choices.map((c, ci) => c.trim() === '' ? '' : `
+          <label class="opt" id="opt-${gi}-${ci}">
+            <input type="radio" name="q${gi}" value="${ci}" onchange="pickMc('${q.id}',${gi},${ci})">
+            <span class="letter">${ci + 1}</span><span>${escapeHtml(c)}</span>
+          </label>`).join('');
+      } else {
+        body = `<textarea class="open-answer" placeholder="พิมพ์คำตอบของคุณ"
+                  oninput="pickOpen('${q.id}', this.value)"></textarea>`;
+      }
+      return `<div class="card">
+        <h2>ข้อ ${gi + 1}. ${escapeHtml(q.text)}</h2>
+        ${(m.images && m.images.length) || m.video || m.audio ? media : ''}
+        ${body}</div>`;
     }
 
-    // ---------- ระบบตรวจจับการออกจากหน้าจอ ----------
+    const answers = {}; // { questionId: value }
+    function pickMc(qid, gi, ci) {
+      answers[qid] = ci;
+      const q = questions.find((x) => x.id === qid);
+      q.choices.forEach((_, k) => { const el = document.getElementById(`opt-${gi}-${k}`); if (el) el.classList.toggle('sel', k === ci); });
+      updateProgress();
+    }
+    function pickOpen(qid, val) { if (val.trim()) answers[qid] = val; else delete answers[qid]; updateProgress(); }
+
+    function updateProgress() {
+      const done = questions.filter((q) => answers[q.id] !== undefined && answers[q.id] !== '').length;
+      const pct = questions.length ? Math.round((done / questions.length) * 100) : 0;
+      document.getElementById('progFill').style.width = pct + '%';
+      document.getElementById('progText').textContent = `${done}/${questions.length} (${pct}%)`;
+    }
+
+    // ---------- ตัวจับเวลา ----------
+    function startTimer(totalSec) {
+      const clock = document.getElementById('clock');
+      clock.style.display = 'inline-block';
+      const endAt = startTime + totalSec * 1000;
+      const tick = () => {
+        const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+        const mm = String(Math.floor(left / 60)).padStart(2, '0');
+        const ss = String(left % 60).padStart(2, '0');
+        clock.textContent = `${mm}:${ss}`;
+        clock.classList.toggle('warn', left <= 30);
+        if (left <= 0) { clearInterval(timerInt); autoSubmit(); }
+      };
+      tick();
+      timerInt = setInterval(tick, 500);
+    }
+    function autoSubmit() {
+      if (finished) return;
+      alert('หมดเวลา! ระบบจะส่งคำตอบให้อัตโนมัติ');
+      submitQuiz(true);
+    }
+
+    // ---------- ตรวจจับการออกจากจอ ----------
     function enableLeaveTracking() {
       document.addEventListener('visibilitychange', () => {
         if (finished) return;
-        if (document.hidden) onLeave('สลับแท็บ/ย่อจอ');
-        else onReturn();
+        if (document.hidden) onLeave('สลับแท็บ/ย่อจอ'); else onReturn();
       });
-      // สลับไปแอปอื่นบนเดสก์ท็อป (บางกรณี visibility ไม่ยิง)
       window.addEventListener('blur', () => { if (!finished && !document.hidden) onLeave('สลับหน้าต่าง'); });
-      // ปิดแท็บ/รีเฟรช/ปัดออกบนมือถือ
       window.addEventListener('pagehide', () => { if (!finished) sendEvent('leave', 'ปิด/ปัดออก', 0); });
     }
-
-    function onLeave(reason) {
-      hiddenAt = Date.now();
-      leaveCount++;
-      updateCounter();
-      showBanner();
-      sendEvent('leave', reason, 0);
-    }
-    function onReturn() {
-      const away = hiddenAt ? Date.now() - hiddenAt : 0;
-      hiddenAt = 0;
-      hideBanner();
-      sendEvent('return', '', away);
-    }
-
+    function onLeave(reason) { hiddenAt = Date.now(); leaveCount++; updateCounter(); showBanner(); sendEvent('leave', reason, 0); }
+    function onReturn() { const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0; hideBanner(); sendEvent('return', '', away); }
     function sendEvent(type, reason, awayMs) {
       const payload = JSON.stringify({ sessionId, name: userName, type, reason, awayMs });
       const url = `/api/quizzes/${quizId}/events`;
-      // sendBeacon ทำงานได้แม้ตอนกำลังปิดหน้า
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
-      } else {
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
-      }
+      if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+      else fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
     }
-
     function updateCounter() {
-      const c = document.getElementById('leaveCounter');
-      c.innerHTML = leaveCount === 0
-        ? 'ยังไม่ออกจากหน้าจอ 👍'
-        : `<span class="pill r">ออกจากจอแล้ว ${leaveCount} ครั้ง</span>`;
+      document.getElementById('leaveCounter').innerHTML = leaveCount === 0
+        ? 'ยังไม่ออกจากหน้าจอ 👍' : `<span class="pill r">ออกจากจอแล้ว ${leaveCount} ครั้ง</span>`;
     }
     let bannerTimer = null;
-    function showBanner() {
-      const b = document.getElementById('banner');
-      b.classList.add('show');
-      clearTimeout(bannerTimer);
-    }
-    function hideBanner() {
-      bannerTimer = setTimeout(() => document.getElementById('banner').classList.remove('show'), 1200);
-    }
+    function showBanner() { document.getElementById('banner').classList.add('show'); clearTimeout(bannerTimer); }
+    function hideBanner() { bannerTimer = setTimeout(() => document.getElementById('banner').classList.remove('show'), 1200); }
 
     // ---------- ส่งคำตอบ ----------
-    async function submitQuiz() {
-      const answers = quiz.questions.map((_, i) => {
-        const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        return sel ? parseInt(sel.value, 10) : -1;
-      });
-      const unanswered = answers.filter((a) => a === -1).length;
-      if (unanswered > 0 && !confirm(`ยังไม่ได้ตอบ ${unanswered} ข้อ ต้องการส่งเลยไหม?`)) return;
+    async function submitQuiz(auto = false) {
+      if (finished) return;
+      const answered = questions.filter((q) => answers[q.id] !== undefined && answers[q.id] !== '').length;
+      if (!auto && answered < questions.length &&
+          !confirm(`ยังไม่ได้ตอบ ${questions.length - answered} ข้อ ต้องการส่งเลยไหม?`)) return;
 
       finished = true;
+      clearInterval(timerInt);
+      const durationSec = Math.round((Date.now() - startTime) / 1000);
       const res = await fetch(`/api/quizzes/${quizId}/responses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, name: userName, answers }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, name: userName, answers, durationSec }),
       });
       const data = await res.json();
 
       document.getElementById('quizForm').style.display = 'none';
       document.getElementById('submitRow').style.display = 'none';
+      document.getElementById('timerBar').style.display = 'none';
       document.getElementById('banner').classList.remove('show');
       document.getElementById('result').style.display = 'block';
-      document.getElementById('score').textContent = `${data.score}/${data.total}`;
+      document.getElementById('score').textContent = data.mcTotal ? `${data.score}/${data.mcTotal}` : '—';
       document.getElementById('leaveResult').textContent = leaveCount;
+      const openCount = questions.filter((q) => q.type === 'open').length;
+      if (openCount) document.getElementById('openNote').textContent = `📝 มีข้ออัตนัย ${openCount} ข้อ รอผู้สร้างตรวจให้คะแนน`;
       window.scrollTo(0, 0);
     }
 
-    function escapeHtml(s) {
-      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
+    function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
     load();
   </script>
 </body>

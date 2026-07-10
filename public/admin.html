@@ -20,27 +20,26 @@
         <div class="stat">
           <div><div class="n" id="nResp">0</div><div class="l">คนที่ตอบ</div></div>
           <div><div class="n" id="nFlag">0</div><div class="l">คนที่เคยออกจากจอ</div></div>
-          <div><div class="n" id="avg">-</div><div class="l">คะแนนเฉลี่ย</div></div>
+          <div><div class="n" id="avg">-</div><div class="l">คะแนนปรนัยเฉลี่ย</div></div>
         </div>
         <div class="spacer"></div>
+        <a class="btn ghost sm" href="/">← หน้าควิซของฉัน</a>
         <button class="btn ghost sm" onclick="load()">🔄 รีเฟรช</button>
       </div>
-      <p class="muted">หน้านี้อัปเดตอัตโนมัติทุก 10 วินาที · เก็บลิงก์นี้ไว้ส่วนตัว</p>
+      <p class="muted">อัปเดตอัตโนมัติทุก 12 วินาที</p>
     </div>
 
     <div class="card" id="tableCard" style="display:none">
       <h2>👥 ผู้ตอบ &amp; พฤติกรรมการออกจากจอ</h2>
       <div style="overflow-x:auto">
         <table>
-          <thead>
-            <tr>
-              <th>ชื่อ</th><th>คะแนน</th><th>ออกจากจอ</th><th>เวลารวมที่หายไป</th><th>ส่งเมื่อ</th>
-            </tr>
-          </thead>
+          <thead><tr>
+            <th>ชื่อ</th><th>คะแนนปรนัย</th><th>ออกจากจอ</th><th>เวลาที่ใช้</th><th>ส่งเมื่อ</th><th>รายละเอียด</th>
+          </tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
-      <p class="muted" style="margin-top:12px">🚩 แถวสีแดง = ผู้ตอบที่ออกจากหน้าจอระหว่างทำ · กด "ดูไทม์ไลน์" เพื่อดูรายละเอียดแต่ละครั้ง</p>
+      <p class="muted" style="margin-top:12px">🚩 แถวสีแดง = ออกจากจอระหว่างทำ · กด "ดูคำตอบ" เพื่อดูคำตอบรายข้อ (รวมข้ออัตนัยที่ต้องตรวจเอง)</p>
     </div>
 
     <div class="card" id="onlyEvents" style="display:none">
@@ -52,20 +51,22 @@
   <script>
     const params = new URLSearchParams(location.search);
     const quizId = params.get('id');
-    const token = params.get('token');
+    const token = params.get('token') || '';
+    let qmap = {};
 
     async function load() {
       const res = await fetch(`/api/quizzes/${quizId}/admin?token=${encodeURIComponent(token)}`);
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
-        showErr(e.error || 'เข้าถึงไม่ได้ — ตรวจสอบลิงก์ให้ถูกต้อง');
-        return;
+        return showErr(e.error || 'เข้าถึงไม่ได้');
       }
       const { quiz, responses, events } = await res.json();
+      qmap = {};
+      (quiz.parts || []).forEach((pt) => pt.questions.forEach((q, i) => { qmap[q.id] = q; }));
       document.getElementById('qtitle').textContent = quiz.title;
+      const total = Object.keys(qmap).length;
       document.getElementById('qsub').textContent =
-        `${quiz.questions.length} คำถาม · สร้างเมื่อ ${new Date(quiz.createdAt).toLocaleString('th-TH')}`;
-
+        `${total} คำถาม · ${(quiz.parts || []).length} Part · สร้างเมื่อ ${new Date(quiz.createdAt).toLocaleString('th-TH')}`;
       render(quiz, responses, events);
     }
 
@@ -73,45 +74,38 @@
       document.getElementById('summary').style.display = 'block';
       document.getElementById('tableCard').style.display = 'block';
 
-      // จัดกลุ่ม event ตาม session
       const bySession = {};
-      events.forEach((ev) => {
-        (bySession[ev.sessionId] = bySession[ev.sessionId] || []).push(ev);
-      });
+      events.forEach((ev) => { (bySession[ev.sessionId] = bySession[ev.sessionId] || []).push(ev); });
 
-      let flagged = 0, scoreSum = 0;
+      let flagged = 0, scoreSum = 0, mcMax = 0;
       const respSessions = new Set();
 
-      const rows = responses.map((r) => {
+      const rows = responses.map((r, ri) => {
         respSessions.add(r.sessionId);
         const evs = (bySession[r.sessionId] || []).sort((a, b) => a.at - b.at);
         const leaves = evs.filter((e) => e.type === 'leave').length;
-        const awayMs = evs.filter((e) => e.type === 'return').reduce((s, e) => s + (e.awayMs || 0), 0);
         if (leaves > 0) flagged++;
-        scoreSum += r.score;
+        scoreSum += r.score; mcMax = Math.max(mcMax, r.mcTotal || 0);
 
-        const pill = leaves === 0
-          ? '<span class="pill g">0 ครั้ง</span>'
+        const pill = leaves === 0 ? '<span class="pill g">0 ครั้ง</span>'
           : `<span class="pill ${leaves >= 3 ? 'r' : 'y'}">${leaves} ครั้ง</span>`;
 
-        return `
-          <tr class="${leaves > 0 ? 'flagged' : ''}">
-            <td><strong>${esc(r.name)}</strong></td>
-            <td>${r.score}/${r.total}</td>
-            <td>${pill}${evs.length ? timeline(evs) : ''}</td>
-            <td>${awayMs ? fmtDur(awayMs) : '-'}</td>
-            <td class="muted">${new Date(r.submittedAt).toLocaleString('th-TH')}</td>
-          </tr>`;
+        return `<tr class="${leaves > 0 ? 'flagged' : ''}">
+          <td><strong>${esc(r.name)}</strong></td>
+          <td>${r.mcTotal ? r.score + '/' + r.mcTotal : '—'}</td>
+          <td>${pill}${evs.length ? timeline(evs) : ''}</td>
+          <td>${r.durationSec ? fmtDur(r.durationSec * 1000) : '-'}</td>
+          <td class="muted">${new Date(r.submittedAt).toLocaleString('th-TH')}</td>
+          <td>${answerDetail(r)}</td>
+        </tr>`;
       }).join('');
 
-      document.getElementById('rows').innerHTML = rows ||
-        '<tr><td colspan="5" class="muted">ยังไม่มีคนตอบ</td></tr>';
+      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="6" class="muted">ยังไม่มีคนตอบ</td></tr>';
       document.getElementById('nResp').textContent = responses.length;
       document.getElementById('nFlag').textContent = flagged;
-      document.getElementById('avg').textContent = responses.length
-        ? (scoreSum / responses.length).toFixed(1) + '/' + quiz.questions.length : '-';
+      document.getElementById('avg').textContent = responses.length && mcMax
+        ? (scoreSum / responses.length).toFixed(1) + '/' + mcMax : '-';
 
-      // คนที่มี event แต่ยังไม่ส่งคำตอบ (เข้ามาแล้วปัดหนีเลย)
       const ghosts = Object.entries(bySession).filter(([sid]) => !respSessions.has(sid));
       if (ghosts.length) {
         document.getElementById('onlyEvents').style.display = 'block';
@@ -125,6 +119,20 @@
       }
     }
 
+    function answerDetail(r) {
+      const items = (r.detail || []).map((d, i) => {
+        const q = qmap[d.id];
+        const qtext = q ? esc(q.text).slice(0, 60) : 'ข้อ ' + (i + 1);
+        if (d.type === 'mc') {
+          const chosen = q && q.choices[d.answer] !== undefined ? esc(q.choices[d.answer]) : '(ไม่ตอบ)';
+          return `<li class="${d.correct ? 'return' : 'leave'}">${d.correct ? '✅' : '❌'} <b>${qtext}</b> → ${chosen}</li>`;
+        }
+        return `<li>✍️ <b>${qtext}</b><br><span style="color:var(--ink)">${esc(d.answer || '(ไม่ตอบ)')}</span>
+          ${q && q.sampleAnswer ? `<br><span class="muted">เฉลย: ${esc(q.sampleAnswer)}</span>` : ''}</li>`;
+      }).join('');
+      return `<details><summary>ดูคำตอบ</summary><ul class="timeline">${items}</ul></details>`;
+    }
+
     function timeline(evs) {
       const items = evs.sort((a, b) => a.at - b.at).map((e) => {
         const t = new Date(e.at).toLocaleTimeString('th-TH');
@@ -135,20 +143,15 @@
       return `<details><summary>ดูไทม์ไลน์</summary><ul class="timeline">${items}</ul></details>`;
     }
 
-    function fmtDur(ms) {
-      const s = Math.round(ms / 1000);
-      if (s < 60) return s + ' วิ';
-      return Math.floor(s / 60) + ' นาที ' + (s % 60) + ' วิ';
-    }
+    function fmtDur(ms) { const s = Math.round(ms / 1000); return s < 60 ? s + ' วิ' : Math.floor(s / 60) + ' นาที ' + (s % 60) + ' วิ'; }
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function showErr(msg) {
-      const e = document.getElementById('err');
-      e.style.display = 'block';
-      e.innerHTML = `<h2>❌ ${esc(msg)}</h2><p class="muted">ลิงก์ดูผลต้องมีทั้ง id และ token ที่ถูกต้อง</p>`;
+      document.getElementById('err').style.display = 'block';
+      document.getElementById('err').innerHTML = `<h2>❌ ${esc(msg)}</h2><p class="muted"><a href="/">← กลับหน้าควิซของฉัน</a></p>`;
     }
 
-    if (!quizId || !token) showErr('ลิงก์ไม่ครบถ้วน');
-    else { load(); setInterval(load, 10000); }
+    if (!quizId) showErr('ลิงก์ไม่ครบถ้วน');
+    else { load(); setInterval(load, 12000); }
   </script>
 </body>
 </html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เข้าสู่ระบบ · ควิซออนไลน์</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>📝 ควิซออนไลน์</h1>
+    <p>สำหรับผู้สร้างควิซ — เข้าสู่ระบบเพื่อจัดการควิซของคุณ</p>
+  </header>
+
+  <div class="auth-wrap">
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="mode('login')">เข้าสู่ระบบ</button>
+      <button id="tabReg" onclick="mode('register')">สมัครสมาชิก</button>
+    </div>
+    <div class="card">
+      <label>อีเมล</label>
+      <input type="text" id="email" placeholder="you@example.com" autocomplete="username">
+      <label>รหัสผ่าน</label>
+      <input type="password" id="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')submit()">
+      <p class="err" id="err"></p>
+      <button class="btn" style="width:100%;justify-content:center;margin-top:8px" id="go" onclick="submit()">เข้าสู่ระบบ</button>
+    </div>
+    <p class="muted" style="text-align:center">คนที่มาทำควิซไม่ต้องล็อกอิน — แค่เปิดลิงก์ที่ได้รับ</p>
+  </div>
+
+  <script>
+    let current = 'login';
+    function mode(m) {
+      current = m;
+      document.getElementById('tabLogin').classList.toggle('active', m === 'login');
+      document.getElementById('tabReg').classList.toggle('active', m === 'register');
+      document.getElementById('go').textContent = m === 'login' ? 'เข้าสู่ระบบ' : 'สมัคร & เข้าใช้งาน';
+      document.getElementById('err').textContent = '';
+    }
+    async function submit() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const res = await fetch('/api/' + current, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { document.getElementById('err').textContent = data.error || 'เกิดข้อผิดพลาด'; return; }
+      location.href = '/';
+    }
+    // ถ้าล็อกอินอยู่แล้วเด้งเข้าแดชบอร์ด
+    fetch('/api/me').then((r) => { if (r.ok) location.href = '/'; });
+  </script>
+</body>
+</html>

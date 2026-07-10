@@ -264,7 +264,39 @@ const server = http.createServer(async (req, res) => {
       }).sort((a, b) => b.createdAt - a.createdAt);
       return sendJson(res, 200, { users, total: users.length });
     }
+    // แอดมิน: ดูข้อมูลผู้ใช้รายคน (ควิซทั้งหมดของเขา)
     const adminUserMatch = p.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (adminUserMatch && req.method === 'GET') {
+      const me = currentUser(req);
+      if (!isAdmin(me)) return sendJson(res, 403, { error: 'เฉพาะแอดมินระบบเท่านั้น' });
+      const usr = db.users[adminUserMatch[1]];
+      if (!usr) return sendJson(res, 404, { error: 'ไม่พบผู้ใช้' });
+      const quizzes = Object.values(db.quizzes).filter((q) => q.ownerId === usr.id).map((q) => ({
+        id: q.id, title: q.title, enabled: !!q.enabled, adminToken: q.adminToken,
+        questionCount: allQuestions(q).length, responseCount: (db.responses[q.id] || []).length,
+        createdAt: q.createdAt,
+      })).sort((a, b) => b.createdAt - a.createdAt);
+      return sendJson(res, 200, { user: { id: usr.id, email: usr.email, createdAt: usr.createdAt }, quizzes });
+    }
+
+    // แอดมิน: รีเซ็ตรหัสผ่านผู้ใช้ (ตั้งรหัสใหม่ ไม่เห็นรหัสเดิม)
+    const resetMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+    if (resetMatch && req.method === 'POST') {
+      const me = currentUser(req);
+      if (!isAdmin(me)) return sendJson(res, 403, { error: 'เฉพาะแอดมินระบบเท่านั้น' });
+      const usr = db.users[resetMatch[1]];
+      if (!usr) return sendJson(res, 404, { error: 'ไม่พบผู้ใช้' });
+      const b = await readJson(req);
+      const pw = String(b.password || '');
+      if (pw.length < 6) return sendJson(res, 400, { error: 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว' });
+      const { salt, hash } = hashPassword(pw);
+      usr.salt = salt; usr.hash = hash;
+      // เตะ session เดิมของผู้ใช้นี้ออก (บังคับให้เข้าใหม่ด้วยรหัสใหม่)
+      for (const sid of Object.keys(db.sessions)) if (db.sessions[sid].userId === usr.id) delete db.sessions[sid];
+      saveDb();
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (adminUserMatch && req.method === 'DELETE') {
       const me = currentUser(req);
       if (!isAdmin(me)) return sendJson(res, 403, { error: 'เฉพาะแอดมินระบบเท่านั้น' });
@@ -424,7 +456,7 @@ const server = http.createServer(async (req, res) => {
       // -- เจ้าของ/มี token: แดชบอร์ดผล --
       if (sub === 'admin' && req.method === 'GET') {
         const token = u.searchParams.get('token');
-        if (!isOwner && token !== quiz.adminToken) return sendJson(res, 403, { error: 'ไม่มีสิทธิ์เข้าถึง' });
+        if (!isOwner && !isAdmin(me) && token !== quiz.adminToken) return sendJson(res, 403, { error: 'ไม่มีสิทธิ์เข้าถึง' });
         return sendJson(res, 200, {
           quiz, responses: db.responses[qid] || [], events: db.events[qid] || [],
         });

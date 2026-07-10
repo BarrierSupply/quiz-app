@@ -8,7 +8,7 @@
 </head>
 <body>
   <div class="appbar">
-    <span class="brand">🛡️ แอดมินระบบ</span>
+    <span class="brand">🛡️ หลังบ้านผู้ดูแลระบบ</span>
     <span class="spacer" style="flex:1"></span>
     <a class="btn ghost sm" href="/">← ควิซของฉัน</a>
     <button class="btn ghost sm" onclick="load()">🔄 รีเฟรช</button>
@@ -20,23 +20,23 @@
     <div id="content" style="display:none">
       <div class="card">
         <div class="stat">
-          <div><div class="n" id="nUsers">0</div><div class="l">ผู้ใช้ทั้งหมด</div></div>
+          <div><div class="n" id="nUsers">0</div><div class="l">อาจารย์/ผู้ใช้</div></div>
           <div><div class="n" id="nQuiz">0</div><div class="l">ควิซรวม</div></div>
           <div><div class="n" id="nResp">0</div><div class="l">คำตอบรวม</div></div>
         </div>
       </div>
 
       <div class="card">
-        <h2>👥 รายชื่อผู้ใช้ (ผู้สร้างควิซ)</h2>
+        <h2>👥 จัดการผู้ใช้</h2>
         <div style="overflow-x:auto">
           <table>
             <thead><tr>
-              <th>อีเมล</th><th>สมัครเมื่อ</th><th>ควิซ</th><th>เปิดใช้งาน</th><th>คำตอบรวม</th><th></th>
+              <th>อีเมล</th><th>สมัครเมื่อ</th><th>ควิซ</th><th>เปิด</th><th>คำตอบ</th><th>จัดการ</th>
             </tr></thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
-        <p class="muted" style="margin-top:10px">🗑️ ลบผู้ใช้ = ลบควิซและคำตอบทั้งหมดของคนนั้นด้วย (กู้คืนไม่ได้)</p>
+        <p class="muted" style="margin-top:10px">📂 ดูข้อมูล = ดูควิซทั้งหมดของผู้ใช้ + เข้าดูผลได้ · 🔑 รีเซ็ตรหัส = ตั้งรหัสใหม่ให้ (ไม่เห็นรหัสเดิม) · 🗑️ ลบ = ลบผู้ใช้+ควิซ+คำตอบทั้งหมด</p>
       </div>
     </div>
   </div>
@@ -68,18 +68,56 @@
       const rows = users.map((u) => {
         totalQuiz += u.quizCount; totalResp += u.responseCount;
         return `<tr>
-          <td><strong>${esc(u.email)}</strong> ${u.isAdmin ? '<span class="pill g">แอดมิน</span>' : ''}${u.isSelf ? '<span class="pill y">คุณ</span>' : ''}</td>
-          <td class="muted">${new Date(u.createdAt).toLocaleString('th-TH')}</td>
-          <td>${u.quizCount}</td>
-          <td>${u.enabledCount}</td>
-          <td>${u.responseCount}</td>
-          <td>${u.isSelf ? '' : `<button class="btn ghost sm" onclick="delUser('${u.id}','${esc(u.email)}')">🗑️ ลบ</button>`}</td>
-        </tr>`;
+            <td><strong>${esc(u.email)}</strong> ${u.isAdmin ? '<span class="pill g">แอดมิน</span>' : ''}${u.isSelf ? '<span class="pill y">คุณ</span>' : ''}</td>
+            <td class="muted">${new Date(u.createdAt).toLocaleString('th-TH')}</td>
+            <td>${u.quizCount}</td>
+            <td>${u.enabledCount}</td>
+            <td>${u.responseCount}</td>
+            <td>
+              <button class="btn ghost sm" onclick="toggleDetail('${u.id}','${esc(u.email)}')">📂 ดูข้อมูล</button>
+              <button class="btn ghost sm" onclick="resetPw('${u.id}','${esc(u.email)}')">🔑 รีเซ็ตรหัส</button>
+              ${u.isSelf ? '' : `<button class="btn ghost sm" onclick="delUser('${u.id}','${esc(u.email)}')">🗑️ ลบ</button>`}
+            </td>
+          </tr>
+          <tr class="detailRow" id="detail-${u.id}" style="display:none"><td colspan="6"></td></tr>`;
       }).join('');
       document.getElementById('rows').innerHTML = rows || '<tr><td colspan="6" class="muted">ยังไม่มีผู้ใช้</td></tr>';
       document.getElementById('nUsers').textContent = users.length;
       document.getElementById('nQuiz').textContent = totalQuiz;
       document.getElementById('nResp').textContent = totalResp;
+    }
+
+    async function toggleDetail(id, email) {
+      const row = document.getElementById('detail-' + id);
+      if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+      const cell = row.firstElementChild;
+      cell.innerHTML = '<span class="muted">กำลังโหลด…</span>';
+      row.style.display = '';
+      const res = await fetch('/api/admin/users/' + id);
+      if (!res.ok) { cell.innerHTML = '<span class="muted">โหลดไม่สำเร็จ</span>'; return; }
+      const { quizzes } = await res.json();
+      if (!quizzes.length) { cell.innerHTML = `<span class="muted">${esc(email)} ยังไม่มีควิซ</span>`; return; }
+      cell.innerHTML = `<div style="padding:6px 4px"><strong>ควิซของ ${esc(email)}</strong>` +
+        quizzes.map((q) => `
+          <div class="row" style="border-bottom:1px solid var(--line);padding:7px 0">
+            <div>${esc(q.title)} ${q.enabled ? '<span class="pill g">เปิด</span>' : '<span class="pill r">ปิด</span>'}
+              <br><span class="muted" style="font-size:.8rem">${q.questionCount} ข้อ · ${q.responseCount} คนตอบ</span></div>
+            <div class="spacer"></div>
+            <a class="btn ghost sm" href="/admin?id=${q.id}&token=${q.adminToken}" target="_blank">📊 ดูผล</a>
+            <a class="btn ghost sm" href="/take?id=${q.id}" target="_blank">🔗 ลิงก์ตอบ</a>
+          </div>`).join('') + '</div>';
+    }
+
+    async function resetPw(id, email) {
+      const pw = prompt(`ตั้งรหัสผ่านใหม่ให้ "${email}" (อย่างน้อย 6 ตัว)\nแล้วแจ้งรหัสนี้ให้เขาไปเข้าระบบและเปลี่ยนเอง:`);
+      if (pw === null) return;
+      if (pw.length < 6) return toast('รหัสผ่านต้องยาวอย่างน้อย 6 ตัว');
+      const res = await fetch(`/api/admin/users/${id}/reset-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast(data.error || 'รีเซ็ตไม่สำเร็จ');
+      toast('ตั้งรหัสใหม่ให้ ' + email + ' แล้ว ✅');
     }
 
     async function delUser(id, email) {
@@ -91,11 +129,11 @@
       load();
     }
 
-    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
     function toast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg; t.classList.add('show');
-      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1800);
+      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2200);
     }
 
     load();

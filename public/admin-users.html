@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ผู้ใช้ระบบ · แอดมิน</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="appbar">
+    <span class="brand">🛡️ แอดมินระบบ</span>
+    <span class="spacer" style="flex:1"></span>
+    <a class="btn ghost sm" href="/">← ควิซของฉัน</a>
+    <button class="btn ghost sm" onclick="load()">🔄 รีเฟรช</button>
+  </div>
+
+  <div class="wrap">
+    <div id="err" class="card" style="display:none"></div>
+
+    <div id="content" style="display:none">
+      <div class="card">
+        <div class="stat">
+          <div><div class="n" id="nUsers">0</div><div class="l">ผู้ใช้ทั้งหมด</div></div>
+          <div><div class="n" id="nQuiz">0</div><div class="l">ควิซรวม</div></div>
+          <div><div class="n" id="nResp">0</div><div class="l">คำตอบรวม</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>👥 รายชื่อผู้ใช้ (ผู้สร้างควิซ)</h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>อีเมล</th><th>สมัครเมื่อ</th><th>ควิซ</th><th>เปิดใช้งาน</th><th>คำตอบรวม</th><th></th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin-top:10px">🗑️ ลบผู้ใช้ = ลบควิซและคำตอบทั้งหมดของคนนั้นด้วย (กู้คืนไม่ได้)</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    async function guard() {
+      const r = await fetch('/api/me');
+      if (!r.ok) { location.href = '/login'; return false; }
+      const me = await r.json();
+      if (!me.isAdmin) {
+        document.getElementById('err').style.display = 'block';
+        document.getElementById('err').innerHTML =
+          '<h2>⛔ เข้าได้เฉพาะแอดมินระบบ</h2><p class="muted">บัญชีนี้ไม่ใช่แอดมิน — ตั้งค่า ADMIN_EMAIL ให้ตรงกับอีเมลนี้ก่อน แล้วเข้าสู่ระบบใหม่ · <a href="/">← กลับหน้าควิซ</a></p>';
+        return false;
+      }
+      return true;
+    }
+
+    async function load() {
+      if (!(await guard())) return;
+      const res = await fetch('/api/admin/users');
+      if (!res.ok) { const e = await res.json().catch(() => ({})); return toast(e.error || 'โหลดไม่สำเร็จ'); }
+      const { users } = await res.json();
+      document.getElementById('content').style.display = 'block';
+
+      let totalQuiz = 0, totalResp = 0;
+      const rows = users.map((u) => {
+        totalQuiz += u.quizCount; totalResp += u.responseCount;
+        return `<tr>
+          <td><strong>${esc(u.email)}</strong> ${u.isAdmin ? '<span class="pill g">แอดมิน</span>' : ''}${u.isSelf ? '<span class="pill y">คุณ</span>' : ''}</td>
+          <td class="muted">${new Date(u.createdAt).toLocaleString('th-TH')}</td>
+          <td>${u.quizCount}</td>
+          <td>${u.enabledCount}</td>
+          <td>${u.responseCount}</td>
+          <td>${u.isSelf ? '' : `<button class="btn ghost sm" onclick="delUser('${u.id}','${esc(u.email)}')">🗑️ ลบ</button>`}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="6" class="muted">ยังไม่มีผู้ใช้</td></tr>';
+      document.getElementById('nUsers').textContent = users.length;
+      document.getElementById('nQuiz').textContent = totalQuiz;
+      document.getElementById('nResp').textContent = totalResp;
+    }
+
+    async function delUser(id, email) {
+      if (!confirm(`ลบผู้ใช้ "${email}" และควิซ/คำตอบทั้งหมดของเขา?`)) return;
+      const res = await fetch('/api/admin/users/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) return toast(data.error || 'ลบไม่สำเร็จ');
+      toast('ลบผู้ใช้แล้ว');
+      load();
+    }
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    load();
+  </script>
+</body>
+</html>

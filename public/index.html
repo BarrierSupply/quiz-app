@@ -10,6 +10,7 @@
   <div class="appbar">
     <span class="brand">📝 ควิซออนไลน์</span>
     <span class="spacer" style="flex:1"></span>
+    <a class="btn ghost sm" id="adminLink" href="/users" style="display:none">🛡️ ผู้ใช้ระบบ</a>
     <span class="email" id="meEmail"></span>
     <button class="btn ghost sm" onclick="logout()">ออกจากระบบ</button>
   </div>
@@ -64,8 +65,10 @@
     async function init() {
       const r = await fetch('/api/me');
       if (!r.ok) { location.href = '/login'; return; }
-      meEmail = (await r.json()).email;
+      const me = await r.json();
+      meEmail = me.email;
       document.getElementById('meEmail').textContent = meEmail;
+      if (me.isAdmin) document.getElementById('adminLink').style.display = '';
       loadDashboard();
     }
     async function logout() {

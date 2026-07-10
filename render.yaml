@@ -8,6 +8,8 @@ services:
     envVars:
       - key: DATA_DIR
         value: /var/data
+      - key: ADMIN_EMAIL
+        sync: false
     disk:
       name: quiz-data
       mountPath: /var/data

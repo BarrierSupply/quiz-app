@@ -19,6 +19,11 @@ const MAX_JSON = 8 * 1024 * 1024;    // 8MB ต่อ request
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// อีเมลที่เป็นแอดมินระบบ (ตั้งผ่าน env ADMIN_EMAIL, คั่นหลายคนด้วยจุลภาค)
+const ADMIN_EMAILS = String(process.env.ADMIN_EMAIL || '')
+  .toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+function isAdmin(user) { return !!(user && ADMIN_EMAILS.includes(user.email)); }
+
 // ---------- ที่เก็บข้อมูล (ไฟล์ JSON ไฟล์เดียว) ----------
 let db = { users: {}, sessions: {}, quizzes: {}, responses: {}, events: {} };
 try {
@@ -184,6 +189,7 @@ function serveStatic(req, res) {
   if (urlPath === '/login') urlPath = '/login.html';
   if (urlPath === '/take') urlPath = '/take.html';
   if (urlPath === '/admin') urlPath = '/admin.html';
+  if (urlPath === '/users') urlPath = '/admin-users.html';
   const filePath = path.join(PUBLIC_DIR, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }
   fs.readFile(filePath, (err, data) => {
@@ -237,7 +243,41 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/me' && req.method === 'GET') {
       const me = currentUser(req);
       if (!me) return sendJson(res, 401, { error: 'ยังไม่ได้เข้าสู่ระบบ' });
-      return sendJson(res, 200, { email: me.email });
+      return sendJson(res, 200, { email: me.email, isAdmin: isAdmin(me) });
+    }
+
+    // ========== แอดมินระบบ: ดู/ลบผู้ใช้ ==========
+    if (p === '/api/admin/users' && req.method === 'GET') {
+      const me = currentUser(req);
+      if (!isAdmin(me)) return sendJson(res, 403, { error: 'เฉพาะแอดมินระบบเท่านั้น' });
+      const users = Object.values(db.users).map((usr) => {
+        const quizzes = Object.values(db.quizzes).filter((q) => q.ownerId === usr.id);
+        const responseCount = quizzes.reduce((s, q) => s + ((db.responses[q.id] || []).length), 0);
+        return {
+          id: usr.id, email: usr.email, createdAt: usr.createdAt,
+          quizCount: quizzes.length,
+          enabledCount: quizzes.filter((q) => q.enabled).length,
+          responseCount,
+          isAdmin: isAdmin(usr),
+          isSelf: usr.id === me.id,
+        };
+      }).sort((a, b) => b.createdAt - a.createdAt);
+      return sendJson(res, 200, { users, total: users.length });
+    }
+    const adminUserMatch = p.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (adminUserMatch && req.method === 'DELETE') {
+      const me = currentUser(req);
+      if (!isAdmin(me)) return sendJson(res, 403, { error: 'เฉพาะแอดมินระบบเท่านั้น' });
+      const uid = adminUserMatch[1];
+      if (!db.users[uid]) return sendJson(res, 404, { error: 'ไม่พบผู้ใช้' });
+      if (uid === me.id) return sendJson(res, 400, { error: 'ลบบัญชีตัวเองไม่ได้' });
+      Object.values(db.quizzes).filter((q) => q.ownerId === uid).forEach((q) => {
+        delete db.quizzes[q.id]; delete db.responses[q.id]; delete db.events[q.id];
+      });
+      for (const sid of Object.keys(db.sessions)) if (db.sessions[sid].userId === uid) delete db.sessions[sid];
+      delete db.users[uid];
+      saveDb();
+      return sendJson(res, 200, { ok: true });
     }
 
     // ========== UPLOAD สื่อ (ต้องล็อกอิน) ==========

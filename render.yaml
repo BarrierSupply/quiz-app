@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: quiz-app
+    runtime: node
+    plan: starter
+    buildCommand: ""
+    startCommand: node server.js
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: quiz-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>แดชบอร์ดผลควิซ</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="qtitle">แดชบอร์ดผลควิซ</h1>
+    <p id="qsub"></p>
+  </header>
+
+  <div class="wrap">
+    <div id="err" class="card" style="display:none"></div>
+
+    <div class="card" id="summary" style="display:none">
+      <div class="row">
+        <div class="stat">
+          <div><div class="n" id="nResp">0</div><div class="l">คนที่ตอบ</div></div>
+          <div><div class="n" id="nFlag">0</div><div class="l">คนที่เคยออกจากจอ</div></div>
+          <div><div class="n" id="avg">-</div><div class="l">คะแนนเฉลี่ย</div></div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="load()">🔄 รีเฟรช</button>
+      </div>
+      <p class="muted">หน้านี้อัปเดตอัตโนมัติทุก 10 วินาที · เก็บลิงก์นี้ไว้ส่วนตัว</p>
+    </div>
+
+    <div class="card" id="tableCard" style="display:none">
+      <h2>👥 ผู้ตอบ &amp; พฤติกรรมการออกจากจอ</h2>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>ชื่อ</th><th>คะแนน</th><th>ออกจากจอ</th><th>เวลารวมที่หายไป</th><th>ส่งเมื่อ</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top:12px">🚩 แถวสีแดง = ผู้ตอบที่ออกจากหน้าจอระหว่างทำ · กด "ดูไทม์ไลน์" เพื่อดูรายละเอียดแต่ละครั้ง</p>
+    </div>
+
+    <div class="card" id="onlyEvents" style="display:none">
+      <h2>⚠️ บันทึกการออกจากจอ (คนที่ยังไม่ส่งคำตอบ)</h2>
+      <div id="ghostList"></div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const quizId = params.get('id');
+    const token = params.get('token');
+
+    async function load() {
+      const res = await fetch(`/api/quizzes/${quizId}/admin?token=${encodeURIComponent(token)}`);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        showErr(e.error || 'เข้าถึงไม่ได้ — ตรวจสอบลิงก์ให้ถูกต้อง');
+        return;
+      }
+      const { quiz, responses, events } = await res.json();
+      document.getElementById('qtitle').textContent = quiz.title;
+      document.getElementById('qsub').textContent =
+        `${quiz.questions.length} คำถาม · สร้างเมื่อ ${new Date(quiz.createdAt).toLocaleString('th-TH')}`;
+
+      render(quiz, responses, events);
+    }
+
+    function render(quiz, responses, events) {
+      document.getElementById('summary').style.display = 'block';
+      document.getElementById('tableCard').style.display = 'block';
+
+      // จัดกลุ่ม event ตาม session
+      const bySession = {};
+      events.forEach((ev) => {
+        (bySession[ev.sessionId] = bySession[ev.sessionId] || []).push(ev);
+      });
+
+      let flagged = 0, scoreSum = 0;
+      const respSessions = new Set();
+
+      const rows = responses.map((r) => {
+        respSessions.add(r.sessionId);
+        const evs = (bySession[r.sessionId] || []).sort((a, b) => a.at - b.at);
+        const leaves = evs.filter((e) => e.type === 'leave').length;
+        const awayMs = evs.filter((e) => e.type === 'return').reduce((s, e) => s + (e.awayMs || 0), 0);
+        if (leaves > 0) flagged++;
+        scoreSum += r.score;
+
+        const pill = leaves === 0
+          ? '<span class="pill g">0 ครั้ง</span>'
+          : `<span class="pill ${leaves >= 3 ? 'r' : 'y'}">${leaves} ครั้ง</span>`;
+
+        return `
+          <tr class="${leaves > 0 ? 'flagged' : ''}">
+            <td><strong>${esc(r.name)}</strong></td>
+            <td>${r.score}/${r.total}</td>
+            <td>${pill}${evs.length ? timeline(evs) : ''}</td>
+            <td>${awayMs ? fmtDur(awayMs) : '-'}</td>
+            <td class="muted">${new Date(r.submittedAt).toLocaleString('th-TH')}</td>
+          </tr>`;
+      }).join('');
+
+      document.getElementById('rows').innerHTML = rows ||
+        '<tr><td colspan="5" class="muted">ยังไม่มีคนตอบ</td></tr>';
+      document.getElementById('nResp').textContent = responses.length;
+      document.getElementById('nFlag').textContent = flagged;
+      document.getElementById('avg').textContent = responses.length
+        ? (scoreSum / responses.length).toFixed(1) + '/' + quiz.questions.length : '-';
+
+      // คนที่มี event แต่ยังไม่ส่งคำตอบ (เข้ามาแล้วปัดหนีเลย)
+      const ghosts = Object.entries(bySession).filter(([sid]) => !respSessions.has(sid));
+      if (ghosts.length) {
+        document.getElementById('onlyEvents').style.display = 'block';
+        document.getElementById('ghostList').innerHTML = ghosts.map(([sid, evs]) => {
+          const name = evs[0].name || 'ไม่ระบุชื่อ';
+          const leaves = evs.filter((e) => e.type === 'leave').length;
+          return `<div style="border-bottom:1px solid var(--line);padding:8px 0">
+            <strong>${esc(name)}</strong> — <span class="pill y">ออกจากจอ ${leaves} ครั้ง</span>
+            <span class="muted"> (ยังไม่ส่งคำตอบ)</span>${timeline(evs)}</div>`;
+        }).join('');
+      }
+    }
+
+    function timeline(evs) {
+      const items = evs.sort((a, b) => a.at - b.at).map((e) => {
+        const t = new Date(e.at).toLocaleTimeString('th-TH');
+        return e.type === 'leave'
+          ? `<li class="leave">🔴 ${t} — ออกจากจอ${e.reason ? ' (' + esc(e.reason) + ')' : ''}</li>`
+          : `<li class="return">🟢 ${t} — กลับเข้าจอ${e.awayMs ? ' (หายไป ' + fmtDur(e.awayMs) + ')' : ''}</li>`;
+      }).join('');
+      return `<details><summary>ดูไทม์ไลน์</summary><ul class="timeline">${items}</ul></details>`;
+    }
+
+    function fmtDur(ms) {
+      const s = Math.round(ms / 1000);
+      if (s < 60) return s + ' วิ';
+      return Math.floor(s / 60) + ' นาที ' + (s % 60) + ' วิ';
+    }
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function showErr(msg) {
+      const e = document.getElementById('err');
+      e.style.display = 'block';
+      e.innerHTML = `<h2>❌ ${esc(msg)}</h2><p class="muted">ลิงก์ดูผลต้องมีทั้ง id และ token ที่ถูกต้อง</p>`;
+    }
+
+    if (!quizId || !token) showErr('ลิงก์ไม่ครบถ้วน');
+    else { load(); setInterval(load, 10000); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>สร้างควิซ</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>📝 สร้างควิซออนไลน์</h1>
+    <p>1 โจทย์ 4 ช้อย · แชร์ให้คนอื่นเข้าตอบ · ดูได้ว่าใครปัดออกจากหน้าจอ</p>
+  </header>
+
+  <div class="wrap">
+    <!-- ฟอร์มสร้าง -->
+    <div id="builder">
+      <div class="card">
+        <label>ชื่อควิซ</label>
+        <input type="text" id="title" placeholder="เช่น แบบทดสอบวิชาวิทยาศาสตร์ บทที่ 1">
+        <label>คำอธิบาย (ไม่บังคับ)</label>
+        <textarea id="desc" placeholder="รายละเอียดสั้น ๆ ให้ผู้ตอบ"></textarea>
+      </div>
+
+      <div id="questions"></div>
+
+      <div class="row">
+        <button class="btn ghost" onclick="addQuestion()">➕ เพิ่มคำถาม</button>
+        <div class="spacer"></div>
+        <button class="btn" onclick="publish()">✅ สร้างควิซ &amp; รับลิงก์</button>
+      </div>
+    </div>
+
+    <!-- ผลลัพธ์หลังสร้าง -->
+    <div id="done" class="card" style="display:none">
+      <h2>🎉 สร้างควิซเรียบร้อย!</h2>
+      <div class="share-box">
+        <strong>🔗 ลิงก์สำหรับผู้ตอบ</strong> (ส่งอันนี้ให้คนอื่น)
+        <code id="shareLink"></code>
+        <button class="btn sm" onclick="copy('shareLink')">คัดลอกลิงก์ตอบ</button>
+      </div>
+      <div class="share-box">
+        <strong>📊 ลิงก์ดูผล &amp; ระบบตรวจจับการออกจากจอ</strong> (เก็บไว้ส่วนตัว!)
+        <code id="adminLink"></code>
+        <button class="btn sm" onclick="copy('adminLink')">คัดลอกลิงก์ดูผล</button>
+        <a class="btn sm ghost" id="openAdmin" href="#" target="_blank">เปิดแดชบอร์ด →</a>
+      </div>
+      <p class="muted">⚠️ เก็บลิงก์ดูผลไว้ให้ดี ถ้าหายจะเข้าดูผลไม่ได้ (ระบบบันทึกไว้ในเบราว์เซอร์นี้ให้แล้วด้านล่าง)</p>
+      <button class="btn ghost" onclick="location.reload()">＋ สร้างควิซใหม่</button>
+    </div>
+
+    <!-- ควิซที่เคยสร้างในเครื่องนี้ -->
+    <div id="mine" class="card" style="display:none">
+      <h2>🗂️ ควิซที่คุณสร้างไว้ (ในเบราว์เซอร์นี้)</h2>
+      <div id="mineList"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let questions = [];
+
+    function addQuestion(data) {
+      questions.push(data || { text: '', choices: ['', '', '', ''], correct: 0 });
+      render();
+    }
+    function removeQuestion(i) { questions.splice(i, 1); render(); }
+
+    function render() {
+      const box = document.getElementById('questions');
+      box.innerHTML = '';
+      questions.forEach((q, i) => {
+        const el = document.createElement('div');
+        el.className = 'q-card';
+        el.innerHTML = `
+          <div class="q-head">
+            <div class="q-num">${i + 1}</div>
+            <input type="text" placeholder="พิมพ์คำถามข้อที่ ${i + 1}"
+                   value="${esc(q.text)}" oninput="questions[${i}].text=this.value">
+            <button class="btn ghost sm" onclick="removeQuestion(${i})" title="ลบข้อนี้">🗑️</button>
+          </div>
+          <div class="muted" style="font-size:.8rem;margin-bottom:4px">เลือกวงกลมหน้าตัวเลือกที่เป็น "คำตอบที่ถูก"</div>
+          ${[0, 1, 2, 3].map((c) => `
+            <div class="choice-row">
+              <input type="radio" name="correct-${i}" ${q.correct === c ? 'checked' : ''}
+                     onchange="questions[${i}].correct=${c}">
+              <span class="tag">${q.correct === c ? '✔ ถูก' : 'ช้อย ' + 'ABCD'[c]}</span>
+              <input type="text" placeholder="ตัวเลือก ${'ABCD'[c]}"
+                     value="${esc(q.choices[c])}" oninput="questions[${i}].choices[${c}]=this.value">
+            </div>`).join('')}
+        `;
+        box.appendChild(el);
+      });
+    }
+
+    function esc(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+    async function publish() {
+      const title = document.getElementById('title').value.trim();
+      const description = document.getElementById('desc').value.trim();
+      const clean = questions.filter((q) => q.text.trim() && q.choices.some((c) => c.trim()));
+      if (!title) return toast('ใส่ชื่อควิซก่อนนะ');
+      if (clean.length === 0) return toast('ต้องมีคำถามอย่างน้อย 1 ข้อ');
+
+      const res = await fetch('/api/quizzes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, questions: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast(data.error || 'เกิดข้อผิดพลาด');
+
+      const base = location.origin;
+      const shareUrl = `${base}/take?id=${data.id}`;
+      const adminUrl = `${base}/admin?id=${data.id}&token=${data.adminToken}`;
+      document.getElementById('shareLink').textContent = shareUrl;
+      document.getElementById('adminLink').textContent = adminUrl;
+      document.getElementById('openAdmin').href = adminUrl;
+      document.getElementById('builder').style.display = 'none';
+      document.getElementById('done').style.display = 'block';
+
+      saveMine({ id: data.id, title, adminUrl, shareUrl, at: Date.now() });
+      window.scrollTo(0, 0);
+    }
+
+    // ---- เก็บควิซที่ตัวเองสร้างไว้ในเครื่อง ----
+    function saveMine(item) {
+      const list = JSON.parse(localStorage.getItem('myQuizzes') || '[]');
+      list.unshift(item);
+      localStorage.setItem('myQuizzes', JSON.stringify(list.slice(0, 50)));
+    }
+    function showMine() {
+      const list = JSON.parse(localStorage.getItem('myQuizzes') || '[]');
+      if (!list.length) return;
+      document.getElementById('mine').style.display = 'block';
+      document.getElementById('mineList').innerHTML = list.map((q) => `
+        <div class="row" style="border-bottom:1px solid var(--line);padding:8px 0">
+          <div><strong>${esc(q.title)}</strong><br>
+            <span class="muted" style="font-size:.8rem">${new Date(q.at).toLocaleString('th-TH')}</span></div>
+          <div class="spacer"></div>
+          <a class="btn sm ghost" href="${q.shareUrl}" target="_blank">ลิงก์ตอบ</a>
+          <a class="btn sm" href="${q.adminUrl}" target="_blank">ดูผล 📊</a>
+        </div>`).join('');
+    }
+
+    function copy(id) {
+      navigator.clipboard.writeText(document.getElementById(id).textContent)
+        .then(() => toast('คัดลอกแล้ว!'));
+    }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    // เริ่มต้นด้วย 1 คำถาม
+    addQuestion();
+    showMine();
+  </script>
+</body>
+</html>

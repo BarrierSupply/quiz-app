@@ -19,9 +19,14 @@ const MAX_JSON = 8 * 1024 * 1024;    // 8MB ต่อ request
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// อีเมลที่เป็นแอดมินระบบ (ตั้งผ่าน env ADMIN_EMAIL, คั่นหลายคนด้วยจุลภาค)
-const ADMIN_EMAILS = String(process.env.ADMIN_EMAIL || '')
-  .toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+// อีเมลที่เป็นแอดมินระบบ
+// - แก้ไข/เพิ่มแอดมินถาวรได้ที่ DEFAULT_ADMIN_EMAILS ด้านล่าง
+// - หรือเพิ่มผ่าน env ADMIN_EMAIL (คั่นหลายคนด้วยจุลภาค) โดยไม่ต้องแก้โค้ด
+const DEFAULT_ADMIN_EMAILS = ['admin12345@teacher.com'];
+const ADMIN_EMAILS = [...new Set([
+  ...DEFAULT_ADMIN_EMAILS,
+  ...String(process.env.ADMIN_EMAIL || '').split(','),
+].map((s) => s.trim().toLowerCase()).filter(Boolean))];
 function isAdmin(user) { return !!(user && ADMIN_EMAILS.includes(user.email)); }
 
 // ---------- ที่เก็บข้อมูล (ไฟล์ JSON ไฟล์เดียว) ----------

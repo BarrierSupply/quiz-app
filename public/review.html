@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ตรวจคำตอบ</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="appbar">
+    <span class="brand">ตรวจคำตอบ</span>
+    <span class="spacer" style="flex:1"></span>
+    <a class="btn ghost sm" id="backBtn" href="#">← กลับหน้าผล</a>
+    <button class="btn ghost sm" onclick="loadData()">รีเฟรช</button>
+  </div>
+
+  <div class="wrap" style="max-width:860px">
+    <div id="err" class="card" style="display:none"></div>
+
+    <div id="content" style="display:none">
+      <h2 id="qTitle" style="margin:4px 4px 10px"></h2>
+
+      <!-- เลือกผู้ตอบ -->
+      <div class="card" style="position:sticky;top:56px;z-index:30">
+        <div class="row">
+          <button class="btn ghost sm" onclick="go(-1)">← คนก่อน</button>
+          <select id="picker" onchange="jump(this.value)" style="flex:1;min-width:160px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font:inherit"></select>
+          <button class="btn ghost sm" onclick="go(1)">คนถัดไป →</button>
+        </div>
+        <div class="row" style="margin-top:10px;gap:16px">
+          <div><span class="muted">ปรนัย</span> <b id="sumMc">-</b></div>
+          <div><span class="muted">รวม</span> <b id="sumTotal">-</b> <span id="sumStatus"></span></div>
+          <div><span class="muted">เวลา</span> <b id="sumTime">-</b></div>
+          <div><span class="muted">ออกจากจอ</span> <b id="sumLeave">-</b></div>
+        </div>
+      </div>
+
+      <div id="sheet"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const quizId = params.get('id');
+    const token = params.get('token') || '';
+    let quiz = null, questions = [], responses = [], leaveBy = {}, cur = 0;
+
+    async function loadData() {
+      const res = await fetch(`/api/quizzes/${quizId}/admin?token=${encodeURIComponent(token)}`);
+      if (!res.ok) { const e = await res.json().catch(() => ({})); return showErr(e.error || 'เข้าถึงไม่ได้'); }
+      const data = await res.json();
+      quiz = data.quiz;
+      responses = data.responses || [];
+      questions = [];
+      (quiz.parts || []).forEach((pt) => pt.questions.forEach((q) => questions.push(q)));
+      leaveBy = {};
+      (data.events || []).forEach((e) => { if (e.type === 'leave') leaveBy[e.sessionId] = (leaveBy[e.sessionId] || 0) + 1; });
+
+      document.getElementById('content').style.display = 'block';
+      document.getElementById('qTitle').textContent = quiz.title;
+      document.getElementById('backBtn').href = `/admin?id=${quizId}&token=${encodeURIComponent(token)}`;
+
+      if (!responses.length) { document.getElementById('sheet').innerHTML = '<div class="card muted">ยังไม่มีคนตอบ</div>'; document.getElementById('picker').innerHTML = ''; return; }
+      if (cur >= responses.length) cur = 0;
+      buildPicker();
+      renderSheet();
+    }
+
+    function qById(id) { return questions.find((q) => q.id === id); }
+    function openSumOf(r) { return Object.values(r.openScores || {}).reduce((s, x) => s + (Number(x) || 0), 0); }
+    function ungradedOf(r) { return (r.detail || []).filter((d) => d.type === 'open' && (r.openScores || {})[d.id] === undefined).length; }
+
+    function buildPicker() {
+      document.getElementById('picker').innerHTML = responses.map((r, i) => {
+        const total = (r.score || 0) + openSumOf(r);
+        const flag = ungradedOf(r) ? ' • รอตรวจ' : '';
+        return `<option value="${i}" ${i === cur ? 'selected' : ''}>${i + 1}. ${escAttr(r.name)} (รวม ${total})${flag}</option>`;
+      }).join('');
+    }
+
+    function renderSheet() {
+      const r = responses[cur];
+      document.getElementById('picker').value = cur;
+      document.getElementById('sumMc').textContent = r.mcTotal ? `${r.score}/${r.mcTotal}` : '—';
+      const total = (r.score || 0) + openSumOf(r);
+      document.getElementById('sumTotal').textContent = total;
+      const ung = ungradedOf(r);
+      document.getElementById('sumStatus').innerHTML = (r.detail || []).some((d) => d.type === 'open')
+        ? (ung ? `<span class="pill y">รอตรวจ ${ung}</span>` : '<span class="pill g">ตรวจครบ</span>') : '';
+      document.getElementById('sumTime').textContent = r.durationSec ? fmtDur(r.durationSec) : '-';
+      const lv = leaveBy[r.sessionId] || 0;
+      document.getElementById('sumLeave').innerHTML = lv ? `<span class="pill r">${lv} ครั้ง</span>` : '<span class="pill g">0</span>';
+
+      const byId = {};
+      (r.detail || []).forEach((d) => { byId[d.id] = d; });
+
+      let html = `<div class="card" style="background:#fbfbfc"><div class="row"><h2 style="margin:0">👤 ${esc(r.name)}</h2>
+        <div class="spacer"></div><span class="muted">ส่งเมื่อ ${new Date(r.submittedAt).toLocaleString('th-TH')}</span></div></div>`;
+
+      questions.forEach((q, i) => {
+        const d = byId[q.id];
+        html += `<div class="card">
+          <div class="q-head"><div class="q-num">${i + 1}</div>
+            <div style="flex:1"><b>${esc(q.text)}</b> ${q.type === 'open' ? '<span class="pill y">อัตนัย</span>' : '<span class="pill g">ปรนัย</span>'}</div>
+          </div>
+          ${mediaHtml(q.media)}
+          ${q.type === 'mc' ? mcBlock(q, d) : openBlock(q, d, r)}
+        </div>`;
+      });
+      document.getElementById('sheet').innerHTML = html;
+    }
+
+    function mediaHtml(m) {
+      if (!m) return '';
+      let h = '';
+      (m.images || []).forEach((url) => { h += `<img src="${url}" class="rev-img" alt="">`; });
+      if (m.video) h += `<video src="${m.video}" controls class="rev-media"></video>`;
+      if (m.audio) h += `<audio src="${m.audio}" controls></audio>`;
+      return h ? `<div class="q-media">${h}</div>` : '';
+    }
+
+    function mcBlock(q, d) {
+      const chosen = d ? d.answer : -1;
+      return q.choices.map((c, ci) => {
+        if (c.trim() === '') return '';
+        const isCorrect = ci === q.correct;
+        const isChosen = ci === chosen;
+        let cls = 'rev-opt';
+        let mark = '';
+        if (isCorrect) { cls += ' correct'; mark = '<span class="rev-mark ok">เฉลย</span>'; }
+        if (isChosen && !isCorrect) { cls += ' wrong'; mark = '<span class="rev-mark bad">ผู้ตอบเลือก ✗</span>'; }
+        else if (isChosen && isCorrect) { mark = '<span class="rev-mark ok">ผู้ตอบเลือก ✓</span>'; }
+        return `<div class="${cls}"><span class="letter">${ci + 1}</span><span style="flex:1">${esc(c)}</span>${mark}</div>`;
+      }).join('') + (chosen === -1 ? '<div class="muted" style="margin-top:6px">— ไม่ได้ตอบข้อนี้ —</div>' : '');
+    }
+
+    function openBlock(q, d, r) {
+      const ans = d ? d.answer : '';
+      const cur = (r.openScores || {})[q.id];
+      return `
+        <div class="rev-answer">${ans ? esc(ans) : '<span class="muted">— ไม่ได้ตอบ —</span>'}</div>
+        ${q.sampleAnswer ? `<div class="rev-sample"><b>เฉลย/แนวทาง:</b> ${esc(q.sampleAnswer)}</div>` : ''}
+        <div class="row" style="margin-top:10px;align-items:center">
+          <b>ให้คะแนนข้อนี้:</b>
+          <input type="number" min="0" step="1" class="ginput" style="width:90px;padding:7px 10px"
+                 value="${cur !== undefined ? cur : ''}" placeholder="—"
+                 onchange="grade('${r.id}','${q.id}',this.value)">
+          <span class="muted">คะแนน</span>
+        </div>`;
+    }
+
+    async function grade(responseId, questionId, val) {
+      const res = await fetch(`/api/quizzes/${quizId}/grade?token=${encodeURIComponent(token)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseId, questionId, score: val === '' ? '' : Number(val) }),
+      });
+      if (!res.ok) { toast('บันทึกคะแนนไม่สำเร็จ'); return; }
+      const r = responses.find((x) => x.id === responseId);
+      if (r) { if (!r.openScores) r.openScores = {}; if (val === '') delete r.openScores[questionId]; else r.openScores[questionId] = Number(val); }
+      // อัปเดตสรุปด้านบน + ตัวเลือกใน dropdown
+      const total = (r.score || 0) + openSumOf(r);
+      document.getElementById('sumTotal').textContent = total;
+      const ung = ungradedOf(r);
+      document.getElementById('sumStatus').innerHTML = ung ? `<span class="pill y">รอตรวจ ${ung}</span>` : '<span class="pill g">ตรวจครบ</span>';
+      buildPicker();
+      toast('บันทึกคะแนนแล้ว');
+    }
+
+    function go(step) { cur = (cur + step + responses.length) % responses.length; renderSheet(); window.scrollTo(0, 0); }
+    function jump(i) { cur = Number(i); renderSheet(); window.scrollTo(0, 0); }
+
+    function fmtDur(sec) { return sec < 60 ? sec + ' วิ' : Math.floor(sec / 60) + ' นาที ' + (sec % 60) + ' วิ'; }
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    function showErr(msg) {
+      document.getElementById('err').style.display = 'block';
+      document.getElementById('err').innerHTML = `<h2>${esc(msg)}</h2><p class="muted"><a href="/">← กลับหน้าควิซของฉัน</a></p>`;
+    }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1600);
+    }
+
+    if (!quizId) showErr('ลิงก์ไม่ครบถ้วน');
+    else loadData();
+  </script>
+</body>
+</html>

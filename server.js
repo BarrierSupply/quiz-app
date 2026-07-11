@@ -238,6 +238,7 @@ function serveStatic(req, res) {
   if (urlPath === '/login') urlPath = '/login.html';
   if (urlPath === '/take') urlPath = '/take.html';
   if (urlPath === '/admin') urlPath = '/admin.html';
+  if (urlPath === '/review') urlPath = '/review.html';
   if (urlPath === '/users') urlPath = '/admin-users.html';
   const filePath = path.join(PUBLIC_DIR, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Forbidden'); return; }

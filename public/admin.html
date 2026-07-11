@@ -24,7 +24,8 @@
         </div>
         <div class="spacer"></div>
         <a class="btn ghost sm" href="/">← หน้าควิซของฉัน</a>
-        <a class="btn sm" id="exportBtn" href="#">⬇️ Export CSV</a>
+        <a class="btn sm" id="reviewBtn" href="#">📄 ตรวจคำตอบเต็มหน้า</a>
+        <a class="btn ghost sm" id="exportBtn" href="#">⬇️ Export CSV</a>
         <button class="btn ghost sm" onclick="load()">รีเฟรช</button>
       </div>
       <p class="muted">อัปเดตอัตโนมัติทุก 12 วินาที · ไฟล์ CSV เปิดใน Excel ได้เลย (รองรับภาษาไทย)</p>
@@ -72,6 +73,7 @@
       document.getElementById('qsub').textContent =
         `${total} คำถาม · ${(quiz.parts || []).length} Part · สร้างเมื่อ ${new Date(quiz.createdAt).toLocaleString('th-TH')}`;
       document.getElementById('exportBtn').href = `/api/quizzes/${quizId}/export.csv?token=${encodeURIComponent(token)}`;
+      document.getElementById('reviewBtn').href = `/review?id=${quizId}&token=${encodeURIComponent(token)}`;
       render(quiz, responses, events);
     }
 

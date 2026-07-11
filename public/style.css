@@ -228,7 +228,23 @@ textarea.q-text { min-height: 46px; overflow: hidden; resize: none; line-height:
 .timer-bar .clock.warn { background: var(--bad-soft); color: var(--bad); }
 .progress { flex: 1; height: 7px; background: #e6e9ef; border-radius: 999px; overflow: hidden; max-width: 340px; }
 .progress > i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .3s; border-radius: 999px; }
-.q-media img { max-width: 100%; border-radius: var(--radius-sm); margin: 8px 0; }
-.q-media video { max-width: 100%; border-radius: var(--radius-sm); margin: 8px 0; }
+.q-media { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; align-items: flex-start; }
+.q-media img { width: 260px; height: 260px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.q-media video { max-width: 360px; border-radius: var(--radius-sm); }
 .part-title { font-size: 1.05rem; font-weight: 700; color: var(--brand); margin: 26px 0 6px; padding-left: 12px; border-left: 3px solid var(--brand); letter-spacing: -.01em; }
 .open-answer { width: 100%; min-height: 90px; }
+
+/* ---------- หน้าตรวจคำตอบ (review) ---------- */
+.rev-img { width: 220px; height: 220px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.rev-media { max-width: 340px; border-radius: var(--radius-sm); }
+.rev-opt { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 11px 14px; margin: 8px 0; background: #fff; }
+.rev-opt .letter { font-weight: 700; color: var(--muted); min-width: 20px; text-align: center; }
+.rev-opt.correct { border-color: var(--ok); background: var(--ok-soft); }
+.rev-opt.wrong { border-color: var(--bad); background: var(--bad-soft); }
+.rev-mark { font-size: .78rem; font-weight: 700; padding: 2px 9px; border-radius: 6px; white-space: nowrap; }
+.rev-mark.ok { background: var(--ok); color: #fff; }
+.rev-mark.bad { background: var(--bad); color: #fff; }
+.rev-answer { background: #fbfbfc; border: 1px solid var(--line); border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm); padding: 12px 14px; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+.rev-sample { margin-top: 8px; font-size: .9rem; color: var(--muted); background: var(--warn-soft); padding: 8px 12px; border-radius: var(--radius-sm); }

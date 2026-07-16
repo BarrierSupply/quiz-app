@@ -49,6 +49,12 @@
         <span class="track"></span>
         <span>อนุญาตให้ทำซ้ำได้ (ปิดไว้ = ทำได้ครั้งเดียวต่อเครื่อง)</span>
       </label>
+      <label class="switch" style="margin-top:12px">
+        <input type="checkbox" id="qKick">
+        <span class="track"></span>
+        <span>โหมดเข้มงวด: ออกจากหน้าจอปุ๊บ ปิดข้อสอบทันที (กลับมาทำต่อไม่ได้)</span>
+      </label>
+      <p class="muted">เหมาะกับการสอบจริง — ถ้าผู้ตอบสลับแท็บ/ย่อจอ/ปิดหน้า ระบบจะส่งคำตอบเท่าที่ทำแล้วปิดข้อสอบทันที</p>
     </div>
 
     <div id="parts"></div>
@@ -136,7 +142,7 @@
     function blankPart(n) { return { id: 'p' + Math.random().toString(36).slice(2, 8), title: 'Part ' + n, questions: [blankQuestion()] }; }
 
     function newQuiz() {
-      state = { quizId: null, title: '', description: '', timeLimitMin: 0, allowRetake: false, parts: [blankPart(1)] };
+      state = { quizId: null, title: '', description: '', timeLimitMin: 0, allowRetake: false, kickOnLeave: false, parts: [blankPart(1)] };
       openEditor('สร้างควิซใหม่');
     }
     async function editQuiz(id) {
@@ -147,6 +153,7 @@
         quizId: id, title: quiz.title, description: quiz.description,
         timeLimitMin: Math.round((quiz.timeLimitSec || 0) / 60),
         allowRetake: !!quiz.allowRetake,
+        kickOnLeave: !!quiz.kickOnLeave,
         parts: (quiz.parts || []).map((pt) => ({
           id: pt.id, title: pt.title,
           questions: pt.questions.map((q) => ({
@@ -168,6 +175,7 @@
       document.getElementById('qDesc').value = state.description;
       document.getElementById('qTime').value = state.timeLimitMin;
       document.getElementById('qRetake').checked = !!state.allowRetake;
+      document.getElementById('qKick').checked = !!state.kickOnLeave;
       renderParts();
       window.scrollTo(0, 0);
     }
@@ -330,12 +338,14 @@
       state.description = document.getElementById('qDesc').value.trim();
       state.timeLimitMin = Math.max(0, parseInt(document.getElementById('qTime').value, 10) || 0);
       state.allowRetake = document.getElementById('qRetake').checked;
+      state.kickOnLeave = document.getElementById('qKick').checked;
       if (!state.title) return toast('ใส่ชื่อควิซก่อน');
 
       const payload = {
         title: state.title, description: state.description,
         timeLimitSec: state.timeLimitMin * 60,
         allowRetake: state.allowRetake,
+        kickOnLeave: state.kickOnLeave,
         parts: state.parts,
       };
       const btn = document.getElementById('saveBtn');

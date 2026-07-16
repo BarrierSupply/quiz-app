@@ -105,8 +105,8 @@
         const pill = leaves === 0 ? '<span class="pill g">0 ครั้ง</span>'
           : `<span class="pill ${leaves >= 3 ? 'r' : 'y'}">${leaves} ครั้ง</span>`;
 
-        return `<tr class="${leaves > 0 ? 'flagged' : ''}">
-          <td><strong>${esc(r.name)}</strong></td>
+        return `<tr class="${leaves > 0 || r.kicked ? 'flagged' : ''}">
+          <td><strong>${esc(r.name)}</strong>${r.kicked ? '<br><span class="pill r">ออกจากจอ · ปิดข้อสอบ</span>' : ''}</td>
           <td>${r.mcTotal ? r.score + '/' + r.mcTotal : '—'}</td>
           <td id="total-${r.id}">${totalCell}</td>
           <td>${pill}${evs.length ? timeline(evs) : ''}</td>

@@ -120,6 +120,7 @@ function sanitizeQuiz(body) {
     description: String(body.description || '').slice(0, 2000),
     timeLimitSec: Math.max(0, Math.min(parseInt(body.timeLimitSec, 10) || 0, 24 * 3600)),
     allowRetake: !!body.allowRetake,
+    kickOnLeave: !!body.kickOnLeave,
     parts: cleanParts,
   };
 }
@@ -158,6 +159,7 @@ function publicQuiz(quiz) {
     description: quiz.description,
     timeLimitSec: quiz.timeLimitSec || 0,
     allowRetake: !!quiz.allowRetake,
+    kickOnLeave: !!quiz.kickOnLeave,
     parts: (quiz.parts || []).map((pt) => ({
       title: pt.title,
       questions: pt.questions.map((q) => ({
@@ -176,7 +178,7 @@ function buildCsv(quiz, responses, events) {
   const leaveBySession = {};
   events.forEach((e) => { if (e.type === 'leave') leaveBySession[e.sessionId] = (leaveBySession[e.sessionId] || 0) + 1; });
 
-  const header = ['ชื่อ', 'คะแนนปรนัย', 'คะแนนอัตนัย', 'คะแนนรวม', 'เวลาที่ใช้(วินาที)', 'ออกจากจอ(ครั้ง)', 'ส่งเมื่อ'];
+  const header = ['ชื่อ', 'คะแนนปรนัย', 'คะแนนอัตนัย', 'คะแนนรวม', 'เวลาที่ใช้(วินาที)', 'ออกจากจอ(ครั้ง)', 'สถานะ', 'ส่งเมื่อ'];
   qs.forEach((q, i) => header.push(`ข้อ${i + 1} (${q.type === 'mc' ? 'ปรนัย' : 'อัตนัย'})`));
   const lines = [header.map(csvCell).join(',')];
 
@@ -192,6 +194,7 @@ function buildCsv(quiz, responses, events) {
       total,
       r.durationSec || 0,
       leaveBySession[r.sessionId] || 0,
+      r.kicked ? 'ปิดข้อสอบ (ออกจากจอ)' : 'ปกติ',
       new Date(r.submittedAt).toLocaleString('th-TH'),
     ];
     qs.forEach((q) => {
@@ -482,6 +485,7 @@ const server = http.createServer(async (req, res) => {
           name: String(b.name || 'ไม่ระบุชื่อ').slice(0, 100),
           detail, score, mcTotal,
           openScores: {}, // { questionId: คะแนนที่ครูให้ }
+          kicked: !!b.kicked, // ถูกปิดข้อสอบเพราะออกจากหน้าจอ
           durationSec: Math.max(0, parseInt(b.durationSec, 10) || 0),
           submittedAt: Date.now(),
         });

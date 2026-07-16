@@ -74,22 +74,28 @@
       // กันทำซ้ำ: ถ้าไม่อนุญาต และเคยส่งจากเครื่องนี้แล้ว
       const done = getDone();
       if (!quiz.allowRetake && done) {
-        document.getElementById('intro').innerHTML =
-          `<h2>คุณทำควิซนี้ไปแล้ว ✓</h2>
-           <p class="muted">ส่งคำตอบในนาม <b>${escapeHtml(done.name)}</b> เมื่อ ${new Date(done.at).toLocaleString('th-TH')}</p>
-           <p class="muted">ควิซนี้ทำได้ครั้งเดียว หากต้องการทำใหม่ กรุณาติดต่อผู้จัดทำ</p>`;
+        document.getElementById('intro').innerHTML = done.kicked
+          ? `<h2 style="color:var(--bad)">ข้อสอบถูกปิดแล้ว</h2>
+             <p class="muted">คุณ (<b>${escapeHtml(done.name)}</b>) ออกจากหน้าจอระหว่างทำ เมื่อ ${new Date(done.at).toLocaleString('th-TH')} ระบบจึงปิดข้อสอบและส่งคำตอบเท่าที่ทำไว้แล้ว</p>
+             <p class="muted">ควิซนี้เป็นโหมดเข้มงวด ทำต่อไม่ได้ หากต้องการทำใหม่ กรุณาติดต่อผู้จัดทำ</p>`
+          : `<h2>คุณทำควิซนี้ไปแล้ว ✓</h2>
+             <p class="muted">ส่งคำตอบในนาม <b>${escapeHtml(done.name)}</b> เมื่อ ${new Date(done.at).toLocaleString('th-TH')}</p>
+             <p class="muted">ควิซนี้ทำได้ครั้งเดียว หากต้องการทำใหม่ กรุณาติดต่อผู้จัดทำ</p>`;
         document.getElementById('intro').style.display = 'block';
         return;
       }
 
-      if (quiz.timeLimitSec > 0) {
+      if (quiz.kickOnLeave) {
+        document.getElementById('timeNote').innerHTML =
+          `⛔ <b style="color:var(--bad)">โหมดเข้มงวด:</b> ถ้าออกจากหน้านี้ (สลับแท็บ / ย่อจอ / ปิดหน้า) แม้ครั้งเดียว ระบบจะ<b>ปิดข้อสอบทันทีและกลับมาทำต่อไม่ได้</b> — เตรียมให้พร้อมก่อนกดเริ่ม`;
+      } else if (quiz.timeLimitSec > 0) {
         document.getElementById('timeNote').innerHTML =
           `ควิซนี้มีเวลาจำกัด <b>${Math.round(quiz.timeLimitSec / 60)} นาที</b> — เริ่มจับเวลาเมื่อกด "เริ่มทำควิซ"`;
       }
       document.getElementById('intro').style.display = 'block';
     }
     function getDone() { try { return JSON.parse(localStorage.getItem('quizDone_' + quizId) || 'null'); } catch { return null; } }
-    function setDone(name) { try { localStorage.setItem('quizDone_' + quizId, JSON.stringify({ name, at: Date.now() })); } catch (_) {} }
+    function setDone(name, kicked) { try { localStorage.setItem('quizDone_' + quizId, JSON.stringify({ name, at: Date.now(), kicked: !!kicked })); } catch (_) {} }
     function fail(msg) { document.getElementById('qtitle').textContent = msg; }
 
     function start() {
@@ -184,12 +190,44 @@
     function enableLeaveTracking() {
       document.addEventListener('visibilitychange', () => {
         if (finished) return;
-        if (document.hidden) onLeave('สลับแท็บ/ย่อจอ'); else onReturn();
+        if (document.hidden) { if (quiz.kickOnLeave) kickOut('สลับแท็บ/ย่อจอ'); else onLeave('สลับแท็บ/ย่อจอ'); }
+        else onReturn();
       });
       window.addEventListener('blur', () => { if (!finished && !document.hidden) onLeave('สลับหน้าต่าง'); });
-      window.addEventListener('pagehide', () => { if (!finished) sendEvent('leave', 'ปิด/ปัดออก', 0); });
+      window.addEventListener('pagehide', () => {
+        if (finished) return;
+        if (quiz.kickOnLeave) kickOut('ปิด/ปัดออก'); else sendEvent('leave', 'ปิด/ปัดออก', 0);
+      });
     }
     function onLeave(reason) { hiddenAt = Date.now(); leaveCount++; updateCounter(); showBanner(); sendEvent('leave', reason, 0); }
+
+    // โหมดเข้มงวด: ออกจากหน้าจอ = ปิดข้อสอบทันที ส่งคำตอบเท่าที่ทำ
+    function kickOut(reason) {
+      if (finished) return;
+      finished = true;
+      clearInterval(timerInt);
+      leaveCount++;
+      sendEvent('leave', reason + ' (ปิดข้อสอบ)', 0);
+      setDone(userName, true);
+      const durationSec = Math.round((Date.now() - startTime) / 1000);
+      const payload = JSON.stringify({ sessionId, name: userName, answers, durationSec, kicked: true });
+      const url = `/api/quizzes/${quizId}/responses`;
+      if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+      else fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
+      showKicked();
+    }
+    function showKicked() {
+      document.getElementById('quizForm').style.display = 'none';
+      document.getElementById('submitRow').style.display = 'none';
+      document.getElementById('timerBar').style.display = 'none';
+      document.getElementById('banner').classList.remove('show');
+      const rz = document.getElementById('result');
+      rz.style.display = 'block';
+      rz.innerHTML = `<h2 style="color:var(--bad)">⛔ ข้อสอบถูกปิดแล้ว</h2>
+        <p>ระบบตรวจพบว่าคุณออกจากหน้าจอระหว่างทำข้อสอบ (โหมดเข้มงวด) จึงส่งคำตอบเท่าที่ทำไว้และปิดข้อสอบทันที</p>
+        <p class="muted">ไม่สามารถกลับมาทำต่อได้ หากมีข้อสงสัยกรุณาติดต่อผู้จัดทำ</p>`;
+      window.scrollTo(0, 0);
+    }
     function onReturn() { const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0; hideBanner(); sendEvent('return', '', away); }
     function sendEvent(type, reason, awayMs) {
       const payload = JSON.stringify({ sessionId, name: userName, type, reason, awayMs });
